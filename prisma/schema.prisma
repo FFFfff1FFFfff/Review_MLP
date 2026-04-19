@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Business {
+  id              String          @id @default(cuid())
+  name            String
+  ownerEmail      String          @unique
+  ownerFirstName  String
+  shortLinkSlug   String          @unique
+  // Either googleReviewUrl (override) or googlePlaceId must be set before sending.
+  googlePlaceId   String?
+  googleReviewUrl String?
+  // Optional per-business SMS body override.
+  smsTemplate     String?
+  createdAt       DateTime        @default(now())
+
+  reviewRequests  ReviewRequest[]
+}
+
+model ReviewRequest {
+  id              String    @id @default(cuid())
+  businessId      String
+  // E.164 format, e.g. +15125551234
+  clientPhoneE164 String
+  // SHA-256 of clientPhoneE164 for dedup lookup without exposing PII in queries/logs.
+  clientPhoneHash String
+  scheduledSendAt DateTime
+  sentAt          DateTime?
+  clickedAt       DateTime?
+  ratedAt         DateTime?
+  rating          Int?
+  // Client-entered text: used as suggested Google review or as private feedback body.
+  reviewText      String?
+  // 'google' | 'private' — set at rating time based on star count.
+  routedTo        String?
+  googleClickedAt DateTime?
+  optedOut        Boolean   @default(false)
+  // Twilio SID once real SMS provider is wired in.
+  smsSid          String?
+  // Short random slug used in /r/:token URL; unique so lookup is cheap.
+  token           String    @unique
+  createdAt       DateTime  @default(now())
+
+  business        Business  @relation(fields: [businessId], references: [id])
+
+  @@index([clientPhoneHash])
+  @@index([scheduledSendAt, sentAt])
+  @@index([businessId, createdAt])
+}
