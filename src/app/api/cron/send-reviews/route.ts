@@ -14,8 +14,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function GET(req: Request) {
   // Vercel Cron attaches Authorization: Bearer ${CRON_SECRET}.
-  const expected = process.env.CRON_SECRET;
-  if (!expected || req.headers.get("authorization") !== `Bearer ${expected}`) {
+  if (req.headers.get("authorization") !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

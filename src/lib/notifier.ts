@@ -36,7 +36,7 @@ class EmailToSmsNotifier implements Notifier {
 }
 
 export function getNotifier(): Notifier {
-  return process.env.NOTIFIER_MODE === "email-sms"
+  return env.NOTIFIER_MODE === "email-sms"
     ? new EmailToSmsNotifier()
     : new ConsoleNotifier();
 }
