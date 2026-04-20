@@ -20,40 +20,69 @@ Single-pilot MLP — v1 hardcodes one business and generalizes in v2.
 
 ## Stack
 
-Next.js 14 (App Router, TS) · Prisma · Postgres (Neon via Vercel) · Tailwind · jose (JWT) · Resend · libphonenumber-js · date-fns-tz · Vercel Cron.
+- **Framework** — Next.js 14 (App Router, TypeScript)
+- **ORM / DB** — Prisma · Postgres (Neon via Vercel)
+- **UI** — Tailwind CSS
+- **Auth** — `jose` (JWT magic link + session cookie)
+- **Email** — Resend
+- **Phone / Time** — `libphonenumber-js`, `date-fns-tz`
+- **Validation** — `zod`
+- **Scheduler** — Vercel Cron (every minute, Pro plan)
 
 ## Code structure
 
 ```
-prisma/
-  schema.prisma              Business + ReviewRequest
-  seed.ts                    Idempotent single-pilot seed
-src/
-  app/
-    owner/{login,dashboard,new}/
-    r/[token]/               Client-facing rating page
-    api/
-      auth/{request,verify}/
-      review-request/        Owner schedules a request
-      r/[token]/rate/        Client submits rating (idempotent)
-      cron/send-reviews/     Vercel Cron sender
-  components/RatingForm.tsx
-  lib/
-    auth.ts                  JWT sign/verify (magic + session)
-    email.ts                 Resend wrapper for magic link
-    env.ts                   Env accessors with fail-fast checks
-    google.ts                resolveGoogleReviewUrl(business)
-    notifier.ts              Notifier interface + impls
-    phone.ts                 E.164 normalize + SHA-256 hash
-    prisma.ts                Shared Prisma client
-    scheduling.ts            9am-9pm CT window + jitter
-    session.ts               Resolve current Business from cookie
-    sms-template.ts          Template interpolation
-    token.ts                 Short URL-safe slug
-  middleware.ts              Guards /owner/*
-vercel.json                  Cron schedule (every minute)
+.
+├── prisma/
+│   ├── schema.prisma              Business + ReviewRequest models
+│   └── seed.ts                    Idempotent single-pilot seed
+├── src/
+│   ├── app/
+│   │   ├── owner/
+│   │   │   ├── login/             Magic-link request form
+│   │   │   ├── dashboard/         Recent requests list
+│   │   │   └── new/               Submit a client phone number
+│   │   ├── r/[token]/             Client-facing rating page
+│   │   └── api/
+│   │       ├── auth/
+│   │       │   ├── request/       POST: email a magic link
+│   │       │   └── verify/        GET:  exchange token for session cookie
+│   │       ├── review-request/    POST: owner schedules a request
+│   │       ├── r/[token]/rate/    POST: client submits rating (idempotent)
+│   │       └── cron/send-reviews/ Vercel Cron: scan due rows and send
+│   ├── components/
+│   │   └── RatingForm.tsx         Stars + optional text + submit
+│   ├── lib/
+│   │   ├── auth.ts                JWT sign/verify (magic + session)
+│   │   ├── email.ts               Resend wrapper for magic link
+│   │   ├── env.ts                 Env accessors with fail-fast checks
+│   │   ├── google.ts              resolveGoogleReviewUrl(business)
+│   │   ├── notifier.ts            Notifier interface + Console / EmailToSms
+│   │   ├── phone.ts               E.164 normalize + SHA-256 hash
+│   │   ├── prisma.ts              Shared Prisma client
+│   │   ├── scheduling.ts          9am-9pm CT window + jitter
+│   │   ├── session.ts             Resolve current Business from cookie
+│   │   ├── sms-template.ts        Template interpolation
+│   │   └── token.ts               Short URL-safe slug generator
+│   └── middleware.ts              Guards /owner/*
+└── vercel.json                    Cron schedule (every minute)
 ```
 
 ## Environment
 
-See `.env.example`. Vercel Postgres (Neon) injects `POSTGRES_PRISMA_URL` and `POSTGRES_URL_NON_POOLING` automatically. Manual vars: `AUTH_SECRET`, `APP_URL`, `RESEND_API_KEY`, `RESEND_FROM`, `CRON_SECRET`, `NOTIFIER_MODE`, `PILOT_OWNER_EMAIL`.
+See `.env.example` for the full list. Vercel Postgres (Neon) injects database URLs automatically; the rest are set manually.
+
+**Auto-injected by Vercel Postgres**
+
+- `POSTGRES_PRISMA_URL` — pooled connection used at runtime
+- `POSTGRES_URL_NON_POOLING` — direct connection used by `prisma db push`
+
+**Set manually**
+
+- `AUTH_SECRET` — 32+ byte random; signs magic link + session JWTs
+- `APP_URL` — deployment URL; used in magic link and SMS short link
+- `RESEND_API_KEY` — Resend API key
+- `RESEND_FROM` — sender address (needs verified domain for non-own recipients)
+- `CRON_SECRET` — shared secret Vercel Cron sends as bearer token
+- `NOTIFIER_MODE` — `console` (log only) or `email-sms` (real send via gateway)
+- `PILOT_OWNER_EMAIL` — email tied to the seeded Business; used at seed time
