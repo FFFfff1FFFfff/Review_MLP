@@ -14,7 +14,6 @@ model Business {
   name            String
   ownerEmail      String          @unique
   ownerFirstName  String
-  shortLinkSlug   String          @unique
   // Either googleReviewUrl (override) or googlePlaceId must be set before sending.
   googlePlaceId   String?
   googleReviewUrl String?
