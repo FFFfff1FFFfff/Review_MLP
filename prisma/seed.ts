@@ -6,9 +6,12 @@ const prisma = new PrismaClient();
 async function main() {
   const ownerEmail = process.env.PILOT_OWNER_EMAIL ?? "owner@example.com";
 
+  // Upsert by shortLinkSlug (the stable per-business identity) so that
+  // changing PILOT_OWNER_EMAIL across deploys updates the owner instead of
+  // colliding on the unique shortLinkSlug.
   await prisma.business.upsert({
-    where: { ownerEmail },
-    update: {},
+    where: { shortLinkSlug: "brb" },
+    update: { ownerEmail },
     create: {
       name: "Beauty Revival Barn",
       ownerEmail,
