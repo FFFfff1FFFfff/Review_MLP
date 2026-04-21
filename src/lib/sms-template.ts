@@ -26,3 +26,25 @@ export function renderSmsBody(
   }
   return body;
 }
+
+// Email variant: not constrained to 160 chars, so we get a friendlier greeting
+// and an explicit call-to-action line.
+export function renderEmailReview(
+  business: BusinessLike,
+  token: string,
+  appUrl: string
+): { subject: string; text: string } {
+  const shortLink = `${appUrl}/r/${token}`;
+  const subject = `How was your visit to ${business.name}?`;
+  const text = [
+    `Hi,`,
+    ``,
+    `${business.ownerFirstName} from ${business.name} here — thanks for coming in.`,
+    `We'd love a quick rating of your visit:`,
+    ``,
+    shortLink,
+    ``,
+    `If you'd rather not get messages like this, just ignore this email.`
+  ].join("\n");
+  return { subject, text };
+}

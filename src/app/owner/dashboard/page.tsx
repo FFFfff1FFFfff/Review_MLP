@@ -3,20 +3,55 @@ import { redirect } from "next/navigation";
 import { getSessionBusiness } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
+const WINDOW_DAYS = 30;
+
 export default async function DashboardPage() {
   const business = await getSessionBusiness();
   if (!business) redirect("/owner/login");
 
-  const recent = await prisma.reviewRequest.findMany({
-    where: { businessId: business.id },
-    orderBy: { createdAt: "desc" },
-    take: 10
-  });
+  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const scope = { businessId: business.id, createdAt: { gt: since } };
+
+  const [
+    createdCount,
+    sentCount,
+    clickedCount,
+    ratedCount,
+    googleClickedCount,
+    privateFeedback,
+    recent
+  ] = await Promise.all([
+    prisma.reviewRequest.count({ where: scope }),
+    prisma.reviewRequest.count({ where: { ...scope, sentAt: { not: null } } }),
+    prisma.reviewRequest.count({ where: { ...scope, clickedAt: { not: null } } }),
+    prisma.reviewRequest.count({ where: { ...scope, ratedAt: { not: null } } }),
+    prisma.reviewRequest.count({
+      where: { ...scope, googleClickedAt: { not: null } }
+    }),
+    prisma.reviewRequest.findMany({
+      where: {
+        businessId: business.id,
+        routedTo: "private",
+        feedbackSubmittedAt: { not: null }
+      },
+      orderBy: { feedbackSubmittedAt: "desc" },
+      take: 20
+    }),
+    prisma.reviewRequest.findMany({
+      where: { businessId: business.id },
+      orderBy: { createdAt: "desc" },
+      take: 10
+    })
+  ]);
 
   return (
-    <main className="mx-auto max-w-xl p-8">
+    <main className="mx-auto max-w-2xl p-8">
       <h1 className="text-2xl font-semibold">{business.name}</h1>
-      <p className="mt-1 text-sm text-gray-600">Signed in as {business.ownerEmail}</p>
+      <p className="mt-1 text-sm text-gray-600">
+        Signed in as {business.ownerEmail}
+      </p>
 
       <Link
         href="/owner/new"
@@ -25,6 +60,44 @@ export default async function DashboardPage() {
         + Request a review
       </Link>
 
+      <h2 className="mt-10 text-lg font-semibold">Funnel — last {WINDOW_DAYS} days</h2>
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <FunnelCard label="Requested" value={createdCount} />
+        <FunnelCard label="Delivered" value={sentCount} />
+        <FunnelCard label="Clicked" value={clickedCount} />
+        <FunnelCard label="Rated" value={ratedCount} />
+        <FunnelCard label="Google-clicked" value={googleClickedCount} />
+      </div>
+
+      <h2 className="mt-10 text-lg font-semibold">Private feedback</h2>
+      {privateFeedback.length === 0 ? (
+        <p className="mt-2 text-sm text-gray-600">No private feedback yet.</p>
+      ) : (
+        <ul className="mt-3 space-y-3">
+          {privateFeedback.map((r) => (
+            <li
+              key={r.id}
+              className="rounded border border-gray-200 p-3 text-sm"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{r.rating}★</span>
+                <span className="text-xs text-gray-500">
+                  {r.feedbackSubmittedAt?.toLocaleString() ?? ""}
+                </span>
+              </div>
+              <p className="mt-2 whitespace-pre-wrap text-gray-800">
+                {r.reviewText}
+              </p>
+              <div className="mt-2 font-mono text-xs text-gray-500">
+                {r.deliveryChannel === "sms"
+                  ? r.clientPhoneE164
+                  : r.clientEmail}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <h2 className="mt-10 text-lg font-semibold">Recent requests</h2>
       {recent.length === 0 ? (
         <p className="mt-2 text-sm text-gray-600">No requests yet.</p>
@@ -32,10 +105,21 @@ export default async function DashboardPage() {
         <ul className="mt-3 divide-y divide-gray-200 border-y border-gray-200">
           {recent.map((r) => (
             <li key={r.id} className="py-3 text-sm">
-              <div className="font-mono">{r.clientPhoneE164}</div>
-              <div className="text-gray-600">
+              <div className="flex items-center gap-2">
+                <span className="rounded bg-gray-100 px-2 py-0.5 text-xs uppercase text-gray-700">
+                  {r.deliveryChannel}
+                </span>
+                <span className="font-mono">
+                  {r.deliveryChannel === "sms"
+                    ? r.clientPhoneE164
+                    : r.clientEmail}
+                </span>
+              </div>
+              <div className="mt-1 text-gray-600">
                 scheduled {r.scheduledSendAt.toISOString()}
                 {r.sentAt ? " · sent" : " · pending"}
+                {r.ratedAt ? ` · rated ${r.rating}★` : ""}
+                {r.routedTo ? ` · ${r.routedTo}` : ""}
                 {r.optedOut ? " · opted out" : ""}
               </div>
             </li>
@@ -43,5 +127,16 @@ export default async function DashboardPage() {
         </ul>
       )}
     </main>
+  );
+}
+
+function FunnelCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded border border-gray-200 p-3">
+      <div className="text-2xl font-semibold">{value}</div>
+      <div className="text-xs uppercase tracking-wide text-gray-500">
+        {label}
+      </div>
+    </div>
   );
 }

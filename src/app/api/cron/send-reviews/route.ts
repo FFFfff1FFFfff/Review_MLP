@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { resolveGoogleReviewUrl } from "@/lib/google";
-import { getNotifier } from "@/lib/notifier";
+import { getNotifier, type NotifierTarget } from "@/lib/notifier";
 import { prisma } from "@/lib/prisma";
-import { renderSmsBody } from "@/lib/sms-template";
+import { renderEmailReview, renderSmsBody } from "@/lib/sms-template";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -35,8 +35,8 @@ export async function GET(req: Request) {
 
   for (const row of due) {
     // Revalidate Google URL at send time so a misconfigured business doesn't
-    // produce SMS with a dead link. Defer (not skip) — otherwise a stuck row
-    // would re-enter every batch and starve the queue.
+    // produce messages with a dead link. Defer (not skip) — otherwise a stuck
+    // row would re-enter every batch and starve the queue.
     if (!resolveGoogleReviewUrl(row.business)) {
       await prisma.reviewRequest.update({
         where: { id: row.id },
@@ -61,6 +61,48 @@ export async function GET(req: Request) {
       continue;
     }
 
+    // Resolve (target, body) per channel. Malformed rows (missing contact
+    // data or unknown channel) shouldn't exist given create-time validation
+    // — if they do, defer them by a day so they don't starve the batch queue
+    // every cron tick. Same template as deferred-no-google-url above.
+    let target: NotifierTarget;
+    let body: string;
+    if (row.deliveryChannel === "sms") {
+      if (!row.clientPhoneE164) {
+        await prisma.reviewRequest.update({
+          where: { id: row.id },
+          data: { scheduledSendAt: new Date(now.getTime() + DAY_MS) }
+        });
+        results.push({ id: row.id, status: "deferred-missing-phone" });
+        continue;
+      }
+      target = { channel: "sms", toPhoneE164: row.clientPhoneE164 };
+      body = renderSmsBody(row.business, row.token, env.APP_URL);
+    } else if (row.deliveryChannel === "email") {
+      if (!row.clientEmail) {
+        await prisma.reviewRequest.update({
+          where: { id: row.id },
+          data: { scheduledSendAt: new Date(now.getTime() + DAY_MS) }
+        });
+        results.push({ id: row.id, status: "deferred-missing-email" });
+        continue;
+      }
+      const rendered = renderEmailReview(row.business, row.token, env.APP_URL);
+      target = {
+        channel: "email",
+        toEmail: row.clientEmail,
+        subject: rendered.subject
+      };
+      body = rendered.text;
+    } else {
+      await prisma.reviewRequest.update({
+        where: { id: row.id },
+        data: { scheduledSendAt: new Date(now.getTime() + DAY_MS) }
+      });
+      results.push({ id: row.id, status: "deferred-unknown-channel" });
+      continue;
+    }
+
     // Optimistic claim: exactly one concurrent invocation wins.
     const claimed = await prisma.reviewRequest.updateMany({
       where: { id: row.id, sentAt: null },
@@ -71,14 +113,12 @@ export async function GET(req: Request) {
       continue;
     }
 
-    const body = renderSmsBody(row.business, row.token, env.APP_URL);
-
     // Wrap ONLY the provider send in the rollback-on-error block. After a
-    // successful send the SMS is already out; a later DB failure must not
+    // successful send the message is already out; a later DB failure must not
     // revert sentAt or the next cron tick will re-deliver.
     let providerId: string | null = null;
     try {
-      ({ providerId } = await notifier.send(row.clientPhoneE164, body));
+      ({ providerId } = await notifier.send(target, body));
     } catch (e: unknown) {
       await prisma.reviewRequest.update({
         where: { id: row.id },
@@ -98,7 +138,7 @@ export async function GET(req: Request) {
         })
         .catch((err) =>
           console.error(
-            `smsSid persist failed for ${row.id} (SMS already sent):`,
+            `smsSid persist failed for ${row.id} (message already sent):`,
             err
           )
         );

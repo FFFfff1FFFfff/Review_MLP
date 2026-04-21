@@ -27,10 +27,18 @@ model Business {
 model ReviewRequest {
   id              String    @id @default(cuid())
   businessId      String
-  // E.164 format, e.g. +15125551234
-  clientPhoneE164 String
+  // Delivery channel chosen at create time: 'sms' or 'email'.
+  // Default is 'sms' for legacy rows created before the channel column existed;
+  // new rows always set this explicitly in the review-request API.
+  deliveryChannel String    @default("sms")
+  // Populated when deliveryChannel='sms'. E.164 format, e.g. +15125551234.
+  clientPhoneE164 String?
   // SHA-256 of clientPhoneE164 for dedup lookup without exposing PII in queries/logs.
-  clientPhoneHash String
+  clientPhoneHash String?
+  // Populated when deliveryChannel='email'. Lowercased, trimmed.
+  clientEmail     String?
+  // SHA-256 of clientEmail for dedup lookup symmetry with phone.
+  clientEmailHash String?
   scheduledSendAt DateTime
   sentAt          DateTime?
   clickedAt       DateTime?
@@ -41,6 +49,8 @@ model ReviewRequest {
   // 'google' | 'private' — set at rating time based on star count.
   routedTo        String?
   googleClickedAt DateTime?
+  // Set when the owner has been emailed about a private-feedback submission.
+  feedbackSubmittedAt DateTime?
   optedOut        Boolean   @default(false)
   // Twilio SID once real SMS provider is wired in.
   smsSid          String?
@@ -51,6 +61,7 @@ model ReviewRequest {
   business        Business  @relation(fields: [businessId], references: [id])
 
   @@index([clientPhoneHash])
+  @@index([clientEmailHash])
   @@index([scheduledSendAt, sentAt])
   @@index([businessId, createdAt])
 }
