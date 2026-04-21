@@ -2,13 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionBusiness } from "@/lib/session";
 import { resolveGoogleReviewUrl } from "@/lib/google";
-import { normalizePhone } from "@/lib/phone";
+import { normalizeContact } from "@/lib/contact";
 import { pickScheduledSendAt } from "@/lib/scheduling";
 import { generateShortToken } from "@/lib/token";
 import { prisma } from "@/lib/prisma";
 
 const Body = z.object({
-  phone: z.string().min(1),
+  channel: z.enum(["sms", "email"]),
+  phone: z.string().trim().optional(),
+  email: z.string().trim().optional(),
   override: z.boolean().optional()
 });
 
@@ -35,12 +37,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
 
-  const normalized = normalizePhone(parsed.data.phone);
-  if (!normalized) {
-    return NextResponse.json({ error: "invalid phone number" }, { status: 400 });
+  const contact = normalizeContact({
+    channel: parsed.data.channel,
+    phone: parsed.data.phone,
+    email: parsed.data.email
+  });
+  if (!contact) {
+    return NextResponse.json(
+      {
+        error:
+          parsed.data.channel === "sms"
+            ? "invalid phone number"
+            : "invalid email address"
+      },
+      { status: 400 }
+    );
   }
 
-  // Per-business hourly rate limit.
+  // Per-business hourly rate limit (channel-agnostic).
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
   const recentCount = await prisma.reviewRequest.count({
     where: { businessId: business.id, createdAt: { gt: hourAgo } }
@@ -52,15 +66,19 @@ export async function POST(req: Request) {
     );
   }
 
-  // 30-day dedup (warn once; override allowed on resubmit).
+  // 30-day dedup keyed on the channel's hash column.
   if (!parsed.data.override) {
     const windowStart = new Date(
       Date.now() - DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000
     );
+    const dupeWhere =
+      contact.channel === "sms"
+        ? { clientPhoneHash: contact.phoneHash }
+        : { clientEmailHash: contact.emailHash };
     const dupe = await prisma.reviewRequest.findFirst({
       where: {
         businessId: business.id,
-        clientPhoneHash: normalized.hash,
+        ...dupeWhere,
         createdAt: { gt: windowStart }
       },
       select: { id: true }
@@ -68,7 +86,7 @@ export async function POST(req: Request) {
     if (dupe) {
       return NextResponse.json(
         {
-          error: `This number was already requested within ${DEDUP_WINDOW_DAYS} days. Submit again to override.`,
+          error: `This ${contact.channel === "sms" ? "number" : "address"} was already requested within ${DEDUP_WINDOW_DAYS} days. Submit again to override.`,
           code: "DUPLICATE"
         },
         { status: 409 }
@@ -78,6 +96,19 @@ export async function POST(req: Request) {
 
   const scheduledSendAt = pickScheduledSendAt();
 
+  const contactFields =
+    contact.channel === "sms"
+      ? {
+          deliveryChannel: "sms" as const,
+          clientPhoneE164: contact.phoneE164,
+          clientPhoneHash: contact.phoneHash
+        }
+      : {
+          deliveryChannel: "email" as const,
+          clientEmail: contact.email,
+          clientEmailHash: contact.emailHash
+        };
+
   // Retry on the rare token collision; token is unique.
   for (let i = 0; i < MAX_TOKEN_RETRIES; i++) {
     const token = generateShortToken();
@@ -85,10 +116,9 @@ export async function POST(req: Request) {
       const row = await prisma.reviewRequest.create({
         data: {
           businessId: business.id,
-          clientPhoneE164: normalized.e164,
-          clientPhoneHash: normalized.hash,
           scheduledSendAt,
-          token
+          token,
+          ...contactFields
         }
       });
       return NextResponse.json({ ok: true, id: row.id, scheduledSendAt });

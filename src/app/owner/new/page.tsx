@@ -3,9 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+type Channel = "sms" | "email";
+
 export default function NewRequestPage() {
   const router = useRouter();
+  const [channel, setChannel] = useState<Channel>("sms");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [override, setOverride] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +22,12 @@ export default function NewRequestPage() {
     const res = await fetch("/api/review-request", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ phone, override })
+      body: JSON.stringify({
+        channel,
+        phone: channel === "sms" ? phone : undefined,
+        email: channel === "email" ? email : undefined,
+        override
+      })
     });
     const body = await res.json().catch(() => ({}));
     setSubmitting(false);
@@ -35,25 +44,78 @@ export default function NewRequestPage() {
     setError(body.error ?? "Failed to submit");
   }
 
+  function resetWarnings() {
+    setWarning(null);
+    setOverride(false);
+  }
+
   return (
     <main className="mx-auto max-w-md p-8">
       <h1 className="text-2xl font-semibold">New review request</h1>
       <form onSubmit={submit} className="mt-6 space-y-4">
-        <label className="block">
-          <span className="text-sm text-gray-700">Client phone</span>
-          <input
-            type="tel"
-            required
-            placeholder="(512) 555-1234"
-            value={phone}
-            onChange={(e) => {
-              setPhone(e.target.value);
-              setWarning(null);
-              setOverride(false);
-            }}
-            className="mt-1 block w-full rounded border border-gray-300 px-3 py-2"
-          />
-        </label>
+        <fieldset className="space-y-2">
+          <legend className="text-sm text-gray-700">Send via</legend>
+          <div className="flex gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="channel"
+                value="sms"
+                checked={channel === "sms"}
+                onChange={() => {
+                  setChannel("sms");
+                  resetWarnings();
+                }}
+              />
+              SMS
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="channel"
+                value="email"
+                checked={channel === "email"}
+                onChange={() => {
+                  setChannel("email");
+                  resetWarnings();
+                }}
+              />
+              Email
+            </label>
+          </div>
+        </fieldset>
+
+        {channel === "sms" ? (
+          <label className="block">
+            <span className="text-sm text-gray-700">Client phone</span>
+            <input
+              type="tel"
+              required
+              placeholder="(512) 555-1234"
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                resetWarnings();
+              }}
+              className="mt-1 block w-full rounded border border-gray-300 px-3 py-2"
+            />
+          </label>
+        ) : (
+          <label className="block">
+            <span className="text-sm text-gray-700">Client email</span>
+            <input
+              type="email"
+              required
+              placeholder="client@example.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                resetWarnings();
+              }}
+              className="mt-1 block w-full rounded border border-gray-300 px-3 py-2"
+            />
+          </label>
+        )}
 
         {warning && (
           <div className="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
@@ -69,7 +131,9 @@ export default function NewRequestPage() {
             ? "Submitting…"
             : override
               ? "Submit anyway"
-              : "Schedule SMS"}
+              : channel === "sms"
+                ? "Schedule SMS"
+                : "Schedule Email"}
         </button>
         {error && <p className="text-sm text-red-600">{error}</p>}
       </form>

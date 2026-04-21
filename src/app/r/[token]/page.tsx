@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { resolveGoogleReviewUrl } from "@/lib/google";
 import RatingForm from "@/components/RatingForm";
 
 // Token links are time-sensitive; never cache.
@@ -28,27 +29,31 @@ export default async function RateReviewPage({
     });
   }
 
-  const expired =
-    Date.now() > req.scheduledSendAt.getTime() + EXPIRY_MS;
-  const alreadyRated = req.ratedAt !== null;
+  const expired = Date.now() > req.scheduledSendAt.getTime() + EXPIRY_MS;
 
-  if (alreadyRated) return <ThanksPage />;
-  if (expired) return <ExpiredPage />;
+  if (expired && !req.ratedAt) return <ExpiredPage />;
+
+  const googleReviewUrl = resolveGoogleReviewUrl(req.business);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col p-6">
       <h1 className="text-2xl font-semibold">{req.business.name}</h1>
       <p className="mt-1 text-sm text-gray-600">How was your visit?</p>
-      <RatingForm token={params.token} />
-    </main>
-  );
-}
-
-function ThanksPage() {
-  return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col p-6">
-      <h1 className="text-2xl font-semibold">Thanks for your feedback!</h1>
-      <p className="mt-2 text-sm text-gray-600">Your response has been recorded.</p>
+      <RatingForm
+        token={params.token}
+        businessName={req.business.name}
+        googleReviewUrl={googleReviewUrl}
+        initialRouting={
+          req.ratedAt
+            ? {
+                routedTo: req.routedTo as "google" | "private" | null,
+                rating: req.rating,
+                reviewText: req.reviewText,
+                feedbackSubmitted: req.feedbackSubmittedAt !== null
+              }
+            : null
+        }
+      />
     </main>
   );
 }
