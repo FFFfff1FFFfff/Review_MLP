@@ -35,9 +35,14 @@ export async function GET(req: Request) {
 
   for (const row of due) {
     // Revalidate Google URL at send time so a misconfigured business doesn't
-    // produce SMS with a dead link.
+    // produce SMS with a dead link. Defer (not skip) — otherwise a stuck row
+    // would re-enter every batch and starve the queue.
     if (!resolveGoogleReviewUrl(row.business)) {
-      results.push({ id: row.id, status: "skipped-no-google-url" });
+      await prisma.reviewRequest.update({
+        where: { id: row.id },
+        data: { scheduledSendAt: new Date(now.getTime() + DAY_MS) }
+      });
+      results.push({ id: row.id, status: "deferred-no-google-url" });
       continue;
     }
 
@@ -68,24 +73,37 @@ export async function GET(req: Request) {
 
     const body = renderSmsBody(row.business, row.token, env.APP_URL);
 
+    // Wrap ONLY the provider send in the rollback-on-error block. After a
+    // successful send the SMS is already out; a later DB failure must not
+    // revert sentAt or the next cron tick will re-deliver.
+    let providerId: string | null = null;
     try {
-      const { providerId } = await notifier.send(row.clientPhoneE164, body);
-      if (providerId) {
-        await prisma.reviewRequest.update({
-          where: { id: row.id },
-          data: { smsSid: providerId }
-        });
-      }
-      results.push({ id: row.id, status: "sent" });
+      ({ providerId } = await notifier.send(row.clientPhoneE164, body));
     } catch (e: unknown) {
-      // Roll back the claim so the next cron tick retries.
       await prisma.reviewRequest.update({
         where: { id: row.id },
         data: { sentAt: null }
       });
       console.error(`send failed for ${row.id}:`, e);
       results.push({ id: row.id, status: "send-failed" });
+      continue;
     }
+
+    // Send succeeded — record providerId best-effort.
+    if (providerId) {
+      await prisma.reviewRequest
+        .update({
+          where: { id: row.id },
+          data: { smsSid: providerId }
+        })
+        .catch((err) =>
+          console.error(
+            `smsSid persist failed for ${row.id} (SMS already sent):`,
+            err
+          )
+        );
+    }
+    results.push({ id: row.id, status: "sent" });
   }
 
   return NextResponse.json({ processed: results.length, results });
