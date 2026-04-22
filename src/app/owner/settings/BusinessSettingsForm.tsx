@@ -84,7 +84,16 @@ export default function BusinessSettingsForm({
         </div>
       ) : (
         <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          No Place ID configured yet. Review requests won&apos;t send until this is set.
+          <p className="font-medium">Connect your Google business listing</p>
+          <p className="mt-1">
+            Tell us where your customers should leave their Google review. Review
+            requests won&apos;t send until this is set.
+          </p>
+          <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs">
+            <li>Search by your business name and city, or paste a Google Maps share link</li>
+            <li>Confirm the right business from the results</li>
+            <li>Save</li>
+          </ol>
         </div>
       )}
 
@@ -100,7 +109,7 @@ export default function BusinessSettingsForm({
               setQuery(e.target.value);
               setError(null);
             }}
-            placeholder="Beauty Revival Barn Liberty Hill TX"
+            placeholder="Your business name and city"
             className="flex-1 rounded border border-gray-300 px-3 py-2"
           />
           <button
