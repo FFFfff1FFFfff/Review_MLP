@@ -11,7 +11,10 @@ const Body = z.object({
   channel: z.enum(["sms", "email"]),
   phone: z.string().trim().optional(),
   email: z.string().trim().optional(),
-  override: z.boolean().optional()
+  override: z.boolean().optional(),
+  // true → skip the 1-3h jitter + 9am-9pm CT window; next cron tick (≤60s)
+  // picks it up. Velocity cap and dedup still apply.
+  sendNow: z.boolean().optional()
 });
 
 const RATE_LIMIT_PER_HOUR = 20;
@@ -94,7 +97,12 @@ export async function POST(req: Request) {
     }
   }
 
-  const scheduledSendAt = pickScheduledSendAt();
+  // sendNow bypasses jitter + send window. Offset 1s into the past so the
+  // cron's `scheduledSendAt <= now` filter picks it up on the very next tick
+  // (≤60s) without a race.
+  const scheduledSendAt = parsed.data.sendNow
+    ? new Date(Date.now() - 1000)
+    : pickScheduledSendAt();
 
   const contactFields =
     contact.channel === "sms"

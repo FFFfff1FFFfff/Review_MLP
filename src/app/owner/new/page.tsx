@@ -4,10 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Channel = "sms" | "email";
+type Timing = "window" | "now";
 
 export default function NewRequestPage() {
   const router = useRouter();
   const [channel, setChannel] = useState<Channel>("sms");
+  const [timing, setTiming] = useState<Timing>("window");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [override, setOverride] = useState(false);
@@ -26,7 +28,8 @@ export default function NewRequestPage() {
         channel,
         phone: channel === "sms" ? phone : undefined,
         email: channel === "email" ? email : undefined,
-        override
+        override,
+        sendNow: timing === "now"
       })
     });
     const body = await res.json().catch(() => ({}));
@@ -117,6 +120,32 @@ export default function NewRequestPage() {
           </label>
         )}
 
+        <fieldset className="space-y-2">
+          <legend className="text-sm text-gray-700">When to send</legend>
+          <div className="flex flex-col gap-2 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="timing"
+                value="window"
+                checked={timing === "window"}
+                onChange={() => setTiming("window")}
+              />
+              Default window <span className="text-gray-500">(1-3h delay, 9am-9pm CT)</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="timing"
+                value="now"
+                checked={timing === "now"}
+                onChange={() => setTiming("now")}
+              />
+              Send now <span className="text-gray-500">(within ~1 minute)</span>
+            </label>
+          </div>
+        </fieldset>
+
         {warning && (
           <div className="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
             {warning}
@@ -131,9 +160,13 @@ export default function NewRequestPage() {
             ? "Submitting…"
             : override
               ? "Submit anyway"
-              : channel === "sms"
-                ? "Schedule SMS"
-                : "Schedule Email"}
+              : timing === "now"
+                ? channel === "sms"
+                  ? "Send SMS now"
+                  : "Send Email now"
+                : channel === "sms"
+                  ? "Schedule SMS"
+                  : "Schedule Email"}
         </button>
         {error && <p className="text-sm text-red-600">{error}</p>}
       </form>
