@@ -9,7 +9,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const BATCH_SIZE = 10;
-const VELOCITY_CAP = 3; // per-business max sends per rolling 24h
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function GET(req: Request) {
@@ -52,7 +51,7 @@ export async function GET(req: Request) {
         sentAt: { gt: new Date(now.getTime() - DAY_MS) }
       }
     });
-    if (recent >= VELOCITY_CAP) {
+    if (recent >= env.VELOCITY_CAP) {
       await prisma.reviewRequest.update({
         where: { id: row.id },
         data: { scheduledSendAt: new Date(now.getTime() + DAY_MS) }

@@ -42,5 +42,17 @@ export const env = {
   },
   get GOOGLE_PLACES_API_KEY() {
     return required("GOOGLE_PLACES_API_KEY");
+  },
+  // Per-business send cap per rolling 24h enforced by the cron. Production
+  // default is 3 to protect SMB customers from over-messaging. Override in
+  // dev/preview via env (e.g. VELOCITY_CAP=50) so testing isn't blocked.
+  get VELOCITY_CAP() {
+    const raw = process.env.VELOCITY_CAP;
+    if (!raw) return 3;
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new Error(`Invalid VELOCITY_CAP: "${raw}". Expected non-negative integer.`);
+    }
+    return n;
   }
 };
