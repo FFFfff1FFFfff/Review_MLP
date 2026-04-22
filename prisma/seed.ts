@@ -17,11 +17,14 @@ async function main() {
     });
     console.log(`updated business ${existing.id} ownerEmail -> ${ownerEmail}`);
   } else {
+    // Placeholder values — owner overwrites `name` via /owner/settings the
+    // first time they save a Place ID (PUT /api/owner/business pulls the
+    // canonical name from the Places API result).
     const created = await prisma.business.create({
       data: {
-        name: "Beauty Revival Barn",
+        name: "Your business",
         ownerEmail,
-        ownerFirstName: "Cici"
+        ownerFirstName: "Owner"
       }
     });
     console.log(`seeded business ${created.id} for ${ownerEmail}`);

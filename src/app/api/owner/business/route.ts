@@ -29,10 +29,15 @@ export async function PUT(req: Request) {
   }
 
   // Null out any stale googleReviewUrl override so the derived URL from the
-  // new Place ID takes effect.
+  // new Place ID takes effect. Also sync business.name to Google's canonical
+  // value so the dashboard stops showing whatever placeholder the seed set.
   await prisma.business.update({
     where: { id: business.id },
-    data: { googlePlaceId: place.placeId, googleReviewUrl: null }
+    data: {
+      googlePlaceId: place.placeId,
+      googleReviewUrl: null,
+      name: place.name
+    }
   });
 
   return NextResponse.json({
