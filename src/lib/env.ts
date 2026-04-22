@@ -36,5 +36,11 @@ export const env = {
   },
   get NOTIFIER_MODE() {
     return notifierMode();
+  },
+  get ANTHROPIC_API_KEY() {
+    return required("ANTHROPIC_API_KEY");
+  },
+  get GOOGLE_PLACES_API_KEY() {
+    return required("GOOGLE_PLACES_API_KEY");
   }
 };
