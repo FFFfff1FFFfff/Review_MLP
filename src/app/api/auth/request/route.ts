@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 const Body = z.object({ email: z.string().email() });
+const COOLDOWN_MS = 60_000;
 
 export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
@@ -18,6 +19,24 @@ export async function POST(req: Request) {
   const business = await prisma.business.findUnique({ where: { ownerEmail: email } });
   if (!business) {
     // Respond 200 to avoid leaking which emails are registered.
+    return NextResponse.json({ ok: true });
+  }
+
+  // Atomic per-email cooldown: exactly one request per COOLDOWN_MS window
+  // claims the slot and sends. Throttled callers also receive 200 — same
+  // shape, no timing-distinguishable extra work — to preserve enumeration
+  // protection above.
+  const claimed = await prisma.business.updateMany({
+    where: {
+      id: business.id,
+      OR: [
+        { lastMagicLinkSentAt: null },
+        { lastMagicLinkSentAt: { lt: new Date(Date.now() - COOLDOWN_MS) } }
+      ]
+    },
+    data: { lastMagicLinkSentAt: new Date() }
+  });
+  if (claimed.count === 0) {
     return NextResponse.json({ ok: true });
   }
 
