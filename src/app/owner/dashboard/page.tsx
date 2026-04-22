@@ -46,12 +46,29 @@ export default async function DashboardPage() {
     })
   ]);
 
+  const needsPlaceIdSetup =
+    !business.googlePlaceId && !business.googleReviewUrl;
+
   return (
     <main className="mx-auto max-w-2xl p-8">
-      <h1 className="text-2xl font-semibold">{business.name}</h1>
-      <p className="mt-1 text-sm text-gray-600">
-        Signed in as {business.ownerEmail}
-      </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">{business.name}</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Signed in as {business.ownerEmail}
+          </p>
+        </div>
+        <Link href="/owner/settings" className="text-sm underline">
+          Settings
+        </Link>
+      </div>
+
+      {needsPlaceIdSetup && (
+        <div className="mt-6 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          Review requests can&apos;t send yet — your Google Place ID isn&apos;t
+          set. <Link href="/owner/settings" className="underline">Add it in Settings</Link>.
+        </div>
+      )}
 
       <Link
         href="/owner/new"
