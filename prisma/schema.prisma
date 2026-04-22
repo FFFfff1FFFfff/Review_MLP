@@ -47,8 +47,12 @@ model ReviewRequest {
   clickedAt       DateTime?
   ratedAt         DateTime?
   rating          Int?
-  // Client-entered text: used as suggested Google review or as private feedback body.
+  // Client-entered text: their optional note in the rating step. Also feeds
+  // the AI generator below as a hint for the suggested Google review.
   reviewText      String?
+  // AI-generated draft Google review shown in the 4-5★ paste view. Cached so
+  // refreshes don't burn another Claude call. Null until first generation.
+  aiSuggestedReview String?
   // 'google' | 'private' — set at rating time based on star count.
   routedTo        String?
   googleClickedAt DateTime?

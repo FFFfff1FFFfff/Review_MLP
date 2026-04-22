@@ -49,6 +49,7 @@ export default async function RateReviewPage({
                 routedTo: req.routedTo as "google" | "private" | null,
                 rating: req.rating,
                 reviewText: req.reviewText,
+                aiSuggestedReview: req.aiSuggestedReview,
                 feedbackSubmitted: req.feedbackSubmittedAt !== null
               }
             : null

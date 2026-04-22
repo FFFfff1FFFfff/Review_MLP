@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Routed = "google" | "private";
 
@@ -8,6 +8,7 @@ interface InitialRouting {
   routedTo: Routed | null;
   rating: number | null;
   reviewText: string | null;
+  aiSuggestedReview: string | null;
   feedbackSubmitted: boolean;
 }
 
@@ -20,7 +21,7 @@ interface Props {
 
 type Stage =
   | { kind: "rate" }
-  | { kind: "google"; rating: number; seedText: string }
+  | { kind: "google"; rating: number; aiSuggestedReview: string | null }
   | { kind: "private"; rating: number; alreadySubmitted: boolean };
 
 export default function RatingForm({
@@ -35,7 +36,7 @@ export default function RatingForm({
       return {
         kind: "google",
         rating: initialRouting.rating ?? 5,
-        seedText: initialRouting.reviewText ?? ""
+        aiSuggestedReview: initialRouting.aiSuggestedReview
       };
     }
     if (initialRouting?.routedTo === "private") {
@@ -54,12 +55,14 @@ export default function RatingForm({
     return (
       <RateStage
         token={token}
-        onRouted={(routedTo, rating, text) => {
+        onRouted={(routedTo, rating) => {
           if (routedTo === "google") {
+            // First-time route: no cached AI draft yet — GoogleStage will
+            // fetch it on mount.
             setStage({
               kind: "google",
               rating,
-              seedText: text ?? ""
+              aiSuggestedReview: null
             });
           } else {
             setStage({ kind: "private", rating, alreadySubmitted: false });
@@ -73,9 +76,8 @@ export default function RatingForm({
     return (
       <GoogleStage
         token={token}
-        businessName={businessName}
         googleReviewUrl={googleReviewUrl}
-        seedText={stage.seedText}
+        cachedAiSuggestedReview={stage.aiSuggestedReview}
       />
     );
   }
@@ -98,7 +100,7 @@ function RateStage({
   onRouted
 }: {
   token: string;
-  onRouted: (routedTo: Routed, rating: number, text: string | undefined) => void;
+  onRouted: (routedTo: Routed, rating: number) => void;
 }) {
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
@@ -123,7 +125,7 @@ function RateStage({
       return;
     }
     const routedTo: Routed = body.routedTo === "google" ? "google" : "private";
-    onRouted(routedTo, rating, text.trim() || undefined);
+    onRouted(routedTo, rating);
   }
 
   return (
@@ -173,31 +175,52 @@ function RateStage({
 
 // ---------- Google routing stage ----------
 
-function buildSuggestedReview(businessName: string, seed: string): string {
-  // Task-defined template, with firstName absent (no client name stored).
-  const prefix = `had a great experience at ${businessName}!`;
-  const tail = seed.trim();
-  return tail ? `${prefix} ${tail}` : prefix;
-}
+type AiState = "ready" | "loading" | "error";
 
 function GoogleStage({
   token,
-  businessName,
   googleReviewUrl,
-  seedText
+  cachedAiSuggestedReview
 }: {
   token: string;
-  businessName: string;
   googleReviewUrl: string | null;
-  seedText: string;
+  cachedAiSuggestedReview: string | null;
 }) {
-  const [text, setText] = useState(() =>
-    buildSuggestedReview(businessName, seedText)
+  // If the row already has a generated draft, use it. Otherwise fetch on
+  // mount. The customer can edit the textarea freely — `text` is local state
+  // and never written back to the server.
+  const [text, setText] = useState(cachedAiSuggestedReview ?? "");
+  const [aiState, setAiState] = useState<AiState>(
+    cachedAiSuggestedReview ? "ready" : "loading"
   );
-  const [copyState, setCopyState] = useState<
-    "idle" | "copied" | "failed"
-  >("idle");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle"
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (cachedAiSuggestedReview) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/r/${token}/suggest`, { method: "POST" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json();
+        if (cancelled) return;
+        if (typeof body.suggested === "string" && body.suggested.trim()) {
+          setText(body.suggested);
+          setAiState("ready");
+        } else {
+          setAiState("error");
+        }
+      } catch {
+        if (!cancelled) setAiState("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, cachedAiSuggestedReview]);
 
   async function copy() {
     try {
@@ -236,7 +259,11 @@ function GoogleStage({
   return (
     <div className="mt-6 flex flex-col gap-4">
       <p className="text-base font-medium">
-        Love to hear it! Your review is ready to paste.
+        Love to hear it! {aiState === "ready"
+          ? "Here's a draft you can edit and paste."
+          : aiState === "loading"
+            ? "Drafting a review for you…"
+            : "Write a quick note to paste on Google."}
       </p>
 
       {copyState === "failed" && (
@@ -254,17 +281,24 @@ function GoogleStage({
           setCopyState("idle");
         }}
         rows={5}
+        disabled={aiState === "loading"}
+        placeholder={
+          aiState === "loading"
+            ? "Drafting…"
+            : "Share what made your visit great"
+        }
         className={`w-full rounded px-3 py-2 text-base ${
           copyState === "failed"
             ? "border-2 border-amber-500"
             : "border border-gray-300"
-        }`}
+        } ${aiState === "loading" ? "animate-pulse bg-gray-50" : ""}`}
       />
 
       <button
         type="button"
         onClick={copy}
-        className="w-full rounded border border-black bg-white px-4 py-3 text-base font-medium text-black"
+        disabled={aiState === "loading" || !text.trim()}
+        className="w-full rounded border border-black bg-white px-4 py-3 text-base font-medium text-black disabled:opacity-40"
       >
         {copyLabel}
       </button>
