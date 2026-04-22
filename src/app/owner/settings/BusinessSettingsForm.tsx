@@ -90,7 +90,7 @@ export default function BusinessSettingsForm({
 
       <form onSubmit={lookup} className="space-y-2">
         <label className="block text-sm text-gray-700">
-          Business name, &ldquo;name city&rdquo;, or Place ID
+          Business name, &ldquo;name city&rdquo;, a Google Maps link, or a Place ID
         </label>
         <div className="flex gap-2">
           <input
@@ -111,6 +111,9 @@ export default function BusinessSettingsForm({
             {status === "looking" ? "Looking up…" : "Look up"}
           </button>
         </div>
+        <p className="text-xs text-gray-500">
+          E.g. paste a Maps share link like https://maps.app.goo.gl/xxx.
+        </p>
       </form>
 
       {results && results.length > 0 && (
