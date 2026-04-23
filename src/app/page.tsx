@@ -9,12 +9,20 @@ export default function Home() {
         <h1 className="text-2xl font-semibold">Alauda Review</h1>
       </div>
       <p className="mt-2 text-sm text-gray-600">SMS or email review requests.</p>
-      <Link
-        href="/owner/login"
-        className="mt-6 inline-block rounded bg-black px-4 py-2 text-sm text-white"
-      >
-        Owner login
-      </Link>
+      <div className="mt-6 flex gap-3">
+        <Link
+          href="/owner/signup"
+          className="inline-block rounded bg-black px-4 py-2 text-sm text-white"
+        >
+          Create account
+        </Link>
+        <Link
+          href="/owner/login"
+          className="inline-block rounded border border-gray-300 px-4 py-2 text-sm"
+        >
+          Log in
+        </Link>
+      </div>
     </main>
   );
 }
