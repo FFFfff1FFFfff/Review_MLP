@@ -24,8 +24,11 @@ export async function POST(req: Request) {
 
   // Atomic per-email cooldown: exactly one request per COOLDOWN_MS window
   // claims the slot and sends. Throttled callers also receive 200 — same
-  // shape, no timing-distinguishable extra work — to preserve enumeration
-  // protection above.
+  // shape, no timing-distinguishable extra work — to preserve the
+  // enumeration protection above. A black-box test of 15 rapid POSTs will
+  // see 15x 200 on purpose; the throttle only limits how many actually
+  // reach sendMagicLinkEmail. Verify via Resend dashboard / lastMagicLinkSentAt
+  // in DB, not via HTTP status codes.
   const claimed = await prisma.business.updateMany({
     where: {
       id: business.id,
