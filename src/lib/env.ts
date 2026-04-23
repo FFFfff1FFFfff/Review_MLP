@@ -29,7 +29,7 @@ export const env = {
     return required("RESEND_API_KEY");
   },
   get RESEND_FROM() {
-    return process.env.RESEND_FROM ?? "Review MLP <onboarding@resend.dev>";
+    return process.env.RESEND_FROM ?? "Alauda Review <onboarding@resend.dev>";
   },
   get CRON_SECRET() {
     return required("CRON_SECRET");

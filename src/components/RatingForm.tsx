@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 type Routed = "google" | "private";
 
@@ -26,11 +26,13 @@ type Stage =
 
 export default function RatingForm({
   token,
-  businessName,
+  businessName: _businessName,
   googleReviewUrl,
   initialRouting
 }: Props) {
-  // If the row is already rated, resume where the client left off.
+  // If the row is already rated, resume where the client left off. On revisit
+  // we use whatever AI draft was cached previously (or null if the first
+  // submission didn't opt into AI).
   const initialStage: Stage = useMemo(() => {
     if (initialRouting?.routedTo === "google") {
       return {
@@ -55,14 +57,12 @@ export default function RatingForm({
     return (
       <RateStage
         token={token}
-        onRouted={(routedTo, rating) => {
+        onRouted={(routedTo, rating, aiDraft) => {
           if (routedTo === "google") {
-            // First-time route: no cached AI draft yet — GoogleStage will
-            // fetch it on mount.
             setStage({
               kind: "google",
               rating,
-              aiSuggestedReview: null
+              aiSuggestedReview: aiDraft
             });
           } else {
             setStage({ kind: "private", rating, alreadySubmitted: false });
@@ -77,7 +77,7 @@ export default function RatingForm({
       <GoogleStage
         token={token}
         googleReviewUrl={googleReviewUrl}
-        cachedAiSuggestedReview={stage.aiSuggestedReview}
+        initialDraft={stage.aiSuggestedReview}
       />
     );
   }
@@ -95,41 +95,78 @@ export default function RatingForm({
 
 // ---------- Rate stage ----------
 
+type RateSubmitMode = "plain" | "ai";
+
 function RateStage({
   token,
   onRouted
 }: {
   token: string;
-  onRouted: (routedTo: Routed, rating: number) => void;
+  onRouted: (
+    routedTo: Routed,
+    rating: number,
+    aiDraft: string | null
+  ) => void;
 }) {
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [text, setText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy] = useState<RateSubmitMode | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (rating === 0 || submitting) return;
-    setSubmitting(true);
+  async function submit(mode: RateSubmitMode) {
+    if (rating === 0 || busy) return;
+    setBusy(mode);
     setError(null);
-    const res = await fetch(`/api/r/${token}/rate`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rating, text: text.trim() || undefined })
-    });
-    const body = await res.json().catch(() => ({}));
-    setSubmitting(false);
-    if (!res.ok) {
-      setError(body.error ?? "Failed to submit");
-      return;
+    try {
+      const res = await fetch(`/api/r/${token}/rate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rating, text: text.trim() || undefined })
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(body.error ?? "Failed to submit");
+        return;
+      }
+      const routedTo: Routed = body.routedTo === "google" ? "google" : "private";
+
+      // Only call /suggest when the customer asked for AI AND we're on the
+      // Google path — low ratings don't need a Google draft.
+      let aiDraft: string | null = null;
+      if (mode === "ai" && routedTo === "google") {
+        try {
+          const sugRes = await fetch(`/api/r/${token}/suggest`, {
+            method: "POST"
+          });
+          const sugBody = await sugRes.json().catch(() => ({}));
+          if (sugRes.ok && typeof sugBody.suggested === "string") {
+            aiDraft = sugBody.suggested;
+          }
+        } catch {
+          // Generation failure isn't fatal — GoogleStage handles a null draft
+          // gracefully (empty textarea + placeholder). No loading spinner.
+        }
+      }
+      onRouted(routedTo, rating, aiDraft);
+    } finally {
+      setBusy(null);
     }
-    const routedTo: Routed = body.routedTo === "google" ? "google" : "private";
-    onRouted(routedTo, rating);
   }
 
+  // Only offer AI draft for ratings that would route to Google. Avoids the
+  // "I asked for AI but ended up in private feedback" surprise.
+  const canUseAi = rating >= 4;
+  const isBusy = busy !== null;
+
   return (
-    <form onSubmit={submit} className="mt-6 flex flex-col gap-6">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit("plain");
+      }}
+      className="mt-6 flex flex-col gap-6"
+    >
       <div className="flex justify-center gap-1">
         {[1, 2, 3, 4, 5].map((n) => {
           const filled = n <= (hover || rating);
@@ -160,12 +197,23 @@ function RateStage({
         className="w-full rounded border border-gray-300 px-3 py-2 text-base"
       />
 
+      {canUseAi && (
+        <button
+          type="button"
+          onClick={() => void submit("ai")}
+          disabled={isBusy}
+          className="w-full rounded border border-black bg-white px-4 py-3 text-base font-medium text-black disabled:opacity-40"
+        >
+          {busy === "ai" ? "Drafting with AI…" : "Draft my review with AI"}
+        </button>
+      )}
+
       <button
         type="submit"
-        disabled={rating === 0 || submitting}
+        disabled={rating === 0 || isBusy}
         className="w-full rounded bg-black px-4 py-3 text-base font-medium text-white disabled:opacity-40"
       >
-        {submitting ? "Submitting…" : "Submit"}
+        {busy === "plain" ? "Submitting…" : "Submit"}
       </button>
 
       {error && <p className="text-center text-sm text-red-600">{error}</p>}
@@ -175,52 +223,23 @@ function RateStage({
 
 // ---------- Google routing stage ----------
 
-type AiState = "ready" | "loading" | "error";
-
 function GoogleStage({
   token,
   googleReviewUrl,
-  cachedAiSuggestedReview
+  initialDraft
 }: {
   token: string;
   googleReviewUrl: string | null;
-  cachedAiSuggestedReview: string | null;
+  initialDraft: string | null;
 }) {
-  // If the row already has a generated draft, use it. Otherwise fetch on
-  // mount. The customer can edit the textarea freely — `text` is local state
-  // and never written back to the server.
-  const [text, setText] = useState(cachedAiSuggestedReview ?? "");
-  const [aiState, setAiState] = useState<AiState>(
-    cachedAiSuggestedReview ? "ready" : "loading"
-  );
+  // Textarea is seeded from whatever the rate submit returned (AI draft or
+  // empty). GoogleStage no longer fetches /suggest on mount — generation
+  // happens synchronously during rate submit when the customer opts in.
+  const [text, setText] = useState(initialDraft ?? "");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle"
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (cachedAiSuggestedReview) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/r/${token}/suggest`, { method: "POST" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const body = await res.json();
-        if (cancelled) return;
-        if (typeof body.suggested === "string" && body.suggested.trim()) {
-          setText(body.suggested);
-          setAiState("ready");
-        } else {
-          setAiState("error");
-        }
-      } catch {
-        if (!cancelled) setAiState("error");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [token, cachedAiSuggestedReview]);
 
   async function copy() {
     try {
@@ -228,7 +247,6 @@ function GoogleStage({
       setCopyState("copied");
     } catch {
       setCopyState("failed");
-      // Focus + select so "Select All, Copy" is one tap away.
       const ta = textareaRef.current;
       if (ta) {
         ta.focus();
@@ -253,17 +271,16 @@ function GoogleStage({
     }
   }
 
+  const hasDraft = !!initialDraft;
   const copyLabel =
     copyState === "copied" ? "Copied! Paste on Google." : "Copy";
 
   return (
     <div className="mt-6 flex flex-col gap-4">
       <p className="text-base font-medium">
-        Love to hear it! {aiState === "ready"
-          ? "Here's a draft you can edit and paste."
-          : aiState === "loading"
-            ? "Drafting a review for you…"
-            : "Write a quick note to paste on Google."}
+        {hasDraft
+          ? "Thanks for the rating. Feel free to edit this before sharing."
+          : "Thanks for the rating. Write a quick note to share on Google."}
       </p>
 
       {copyState === "failed" && (
@@ -281,23 +298,18 @@ function GoogleStage({
           setCopyState("idle");
         }}
         rows={5}
-        disabled={aiState === "loading"}
-        placeholder={
-          aiState === "loading"
-            ? "Drafting…"
-            : "Share what made your visit great"
-        }
+        placeholder="Share what made your visit great"
         className={`w-full rounded px-3 py-2 text-base ${
           copyState === "failed"
             ? "border-2 border-amber-500"
             : "border border-gray-300"
-        } ${aiState === "loading" ? "animate-pulse bg-gray-50" : ""}`}
+        }`}
       />
 
       <button
         type="button"
         onClick={copy}
-        disabled={aiState === "loading" || !text.trim()}
+        disabled={!text.trim()}
         className="w-full rounded border border-black bg-white px-4 py-3 text-base font-medium text-black disabled:opacity-40"
       >
         {copyLabel}
@@ -323,7 +335,7 @@ function GoogleStage({
             Open Google Reviews
           </button>
           <p className="text-center text-sm text-red-600">
-            Google Reviews isn't configured for this business.
+            Google Reviews isn&apos;t configured for this business.
           </p>
         </>
       )}
@@ -379,7 +391,7 @@ function PrivateStage({
   return (
     <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
       <p className="text-base">
-        Sorry it wasn't a great visit. Tell us what happened — this goes
+        Sorry it wasn&apos;t a great visit. Tell us what happened — this goes
         straight to the owner and stays private.
       </p>
       <textarea

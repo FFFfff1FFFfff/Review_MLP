@@ -51,7 +51,12 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-2xl p-8">
-      <div className="flex items-start justify-between">
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="" className="h-4 w-4" />
+        <span>Alauda Review</span>
+      </div>
+      <div className="mt-3 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold">{business.name}</h1>
           <p className="mt-1 text-sm text-gray-600">
