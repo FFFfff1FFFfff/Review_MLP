@@ -22,7 +22,15 @@ interface Props {
 type Stage =
   | { kind: "rate" }
   | { kind: "google"; rating: number; aiSuggestedReview: string | null }
-  | { kind: "private"; rating: number; alreadySubmitted: boolean };
+  | {
+      kind: "private";
+      rating: number;
+      alreadySubmitted: boolean;
+      // The text the customer typed in the rate step's optional textarea.
+      // We seed PrivateStage with this so their first, most candid comment
+      // isn't silently overwritten when they submit the private feedback form.
+      initialText: string;
+    };
 
 export default function RatingForm({
   token,
@@ -45,7 +53,12 @@ export default function RatingForm({
       return {
         kind: "private",
         rating: initialRouting.rating ?? 1,
-        alreadySubmitted: initialRouting.feedbackSubmitted
+        alreadySubmitted: initialRouting.feedbackSubmitted,
+        // On revisit before submitting feedback, reviewText holds the rate-
+        // step textarea content. After feedback is submitted it holds the
+        // feedback body — but in that case we render the Thanks view and
+        // initialText is ignored anyway.
+        initialText: initialRouting.reviewText ?? ""
       };
     }
     return { kind: "rate" };
@@ -57,7 +70,7 @@ export default function RatingForm({
     return (
       <RateStage
         token={token}
-        onRouted={(routedTo, rating, aiDraft) => {
+        onRouted={(routedTo, rating, rateText, aiDraft) => {
           if (routedTo === "google") {
             setStage({
               kind: "google",
@@ -65,7 +78,12 @@ export default function RatingForm({
               aiSuggestedReview: aiDraft
             });
           } else {
-            setStage({ kind: "private", rating, alreadySubmitted: false });
+            setStage({
+              kind: "private",
+              rating,
+              alreadySubmitted: false,
+              initialText: rateText
+            });
           }
         }}
       />
@@ -86,8 +104,14 @@ export default function RatingForm({
     <PrivateStage
       token={token}
       alreadySubmitted={stage.alreadySubmitted}
+      initialText={stage.initialText}
       onSubmitted={() =>
-        setStage({ kind: "private", rating: stage.rating, alreadySubmitted: true })
+        setStage({
+          kind: "private",
+          rating: stage.rating,
+          alreadySubmitted: true,
+          initialText: stage.initialText
+        })
       }
     />
   );
@@ -105,6 +129,7 @@ function RateStage({
   onRouted: (
     routedTo: Routed,
     rating: number,
+    rateText: string,
     aiDraft: string | null
   ) => void;
 }) {
@@ -148,7 +173,7 @@ function RateStage({
           // gracefully (empty textarea + placeholder). No loading spinner.
         }
       }
-      onRouted(routedTo, rating, aiDraft);
+      onRouted(routedTo, rating, text.trim(), aiDraft);
     } finally {
       setBusy(null);
     }
@@ -348,13 +373,19 @@ function GoogleStage({
 function PrivateStage({
   token,
   alreadySubmitted,
+  initialText,
   onSubmitted
 }: {
   token: string;
   alreadySubmitted: boolean;
+  initialText: string;
   onSubmitted: () => void;
 }) {
-  const [text, setText] = useState("");
+  // Seed from whatever the customer wrote in the rate step's optional
+  // textarea. The /feedback endpoint overwrites reviewText, so without this
+  // seed their first candid comment would be silently lost the moment they
+  // submit the private-feedback form.
+  const [text, setText] = useState(initialText);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
