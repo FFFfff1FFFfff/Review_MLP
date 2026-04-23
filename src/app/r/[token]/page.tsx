@@ -37,7 +37,12 @@ export default async function RateReviewPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col p-6">
-      <h1 className="text-2xl font-semibold">{req.business.name}</h1>
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="" className="h-4 w-4" />
+        <span>Alauda Review</span>
+      </div>
+      <h1 className="mt-4 text-2xl font-semibold">{req.business.name}</h1>
       <p className="mt-1 text-sm text-gray-600">How was your visit?</p>
       <RatingForm
         token={params.token}

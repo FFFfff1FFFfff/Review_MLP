@@ -10,13 +10,13 @@ function getClient(): Anthropic {
 // The whole point of generating per-customer is to avoid Google's
 // templated-review filter — so the prompt biases hard toward variety in
 // phrasing, length, and openers. Customer can edit the result before pasting.
-const SYSTEM_PROMPT = `You write short, natural-sounding draft Google reviews for small businesses, based on a brief input from a happy customer. The customer will see your output in a textarea and can edit it before posting.
+const SYSTEM_PROMPT = `You write very short, natural-sounding draft Google reviews for small businesses, based on a brief input from a happy customer. The customer will see your output in a textarea and can edit it before posting.
 
 Constraints:
-- Sound human, not templated. Vary phrasing, sentence structure, and length each time you're called — even if the input is similar.
-- 1-3 sentences, 20-80 words total.
-- If the customer's note is non-empty, build on the sentiment they expressed. If empty, write something general but warm and authentic.
-- Avoid corporate or formal language. No emojis. No exclamation chains.
+- Sound human, not templated. Vary phrasing and openers each time — even if the input is similar.
+- 1 sentence, 10-25 words total. Brevity matters more than polish; a real customer writing quickly wouldn't produce more than this.
+- If the customer's note is non-empty, lean on the sentiment they expressed. If empty, write something plain and authentic.
+- Avoid corporate or formal language. No emojis. No exclamation marks. No gushing ("amazing", "incredible", "the best").
 - Don't always start with "I". Mix up openers (the business name, the experience, a feeling, the visit).
 - Don't invent specific facts (services received, prices, staff names) the customer didn't mention.
 - Output the review text only — no preamble, no quotes, no explanation.`;
@@ -30,7 +30,7 @@ export async function generateSuggestedReview(
 
   const response = await getClient().messages.create({
     model: "claude-opus-4-7",
-    max_tokens: 400,
+    max_tokens: 120,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userPrompt }]
   });

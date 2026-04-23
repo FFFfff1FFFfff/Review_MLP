@@ -29,7 +29,12 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto max-w-md p-8">
-      <h1 className="text-2xl font-semibold">Owner login</h1>
+      <div className="flex items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="" className="h-7 w-7" />
+        <h1 className="text-2xl font-semibold">Alauda Review</h1>
+      </div>
+      <h2 className="mt-6 text-lg font-semibold">Owner login</h2>
       {status === "sent" ? (
         <p className="mt-6 text-sm text-gray-700">
           Check <b>{email}</b> for a login link. It expires in 15 minutes.
