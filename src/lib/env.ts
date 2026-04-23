@@ -54,5 +54,16 @@ export const env = {
       throw new Error(`Invalid VELOCITY_CAP: "${raw}". Expected non-negative integer.`);
     }
     return n;
+  },
+  // Twilio — used for real SMS sending when NOTIFIER_MODE=email-sms. Only
+  // accessed in that mode, so console/dev doesn't need them.
+  get TWILIO_ACCOUNT_SID() {
+    return required("TWILIO_ACCOUNT_SID");
+  },
+  get TWILIO_AUTH_TOKEN() {
+    return required("TWILIO_AUTH_TOKEN");
+  },
+  get TWILIO_PHONE_NUMBER() {
+    return required("TWILIO_PHONE_NUMBER");
   }
 };
