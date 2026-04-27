@@ -136,6 +136,7 @@ function RateStage({
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [text, setText] = useState("");
+  const [keepPrivate, setKeepPrivate] = useState(false);
   const [busy, setBusy] = useState<RateSubmitMode | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,7 +148,11 @@ function RateStage({
       const res = await fetch(`/api/r/${token}/rate`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ rating, text: text.trim() || undefined })
+        body: JSON.stringify({
+          rating,
+          text: text.trim() || undefined,
+          keepPrivate
+        })
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -180,8 +185,9 @@ function RateStage({
   }
 
   // Only offer AI draft for ratings that would route to Google. Avoids the
-  // "I asked for AI but ended up in private feedback" surprise.
-  const canUseAi = rating >= 4;
+  // "I asked for AI but ended up in private feedback" surprise. keepPrivate
+  // forces the private path, so suppress AI in that case too.
+  const canUseAi = rating >= 4 && !keepPrivate;
   const isBusy = busy !== null;
 
   return (
@@ -221,6 +227,16 @@ function RateStage({
         maxLength={2000}
         className="w-full rounded border border-gray-300 px-3 py-2 text-base"
       />
+
+      <label className="flex items-start gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={keepPrivate}
+          onChange={(e) => setKeepPrivate(e.target.checked)}
+          className="mt-1"
+        />
+        <span>Send only to the owner — don&apos;t route to Google.</span>
+      </label>
 
       {canUseAi && (
         <button
