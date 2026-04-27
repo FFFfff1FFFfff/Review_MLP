@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -54,7 +55,13 @@ export default function NewRequestPage() {
 
   return (
     <main className="mx-auto max-w-md p-8">
-      <h1 className="text-2xl font-semibold">New review request</h1>
+      <Link
+        href="/owner/dashboard"
+        className="text-sm text-gray-600 hover:underline"
+      >
+        ← Back to dashboard
+      </Link>
+      <h1 className="mt-4 text-2xl font-semibold">New review request</h1>
       <form onSubmit={submit} className="mt-6 space-y-4">
         <fieldset className="space-y-2">
           <legend className="text-sm text-gray-700">Send via</legend>

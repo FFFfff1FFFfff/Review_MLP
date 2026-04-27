@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionBusiness } from "@/lib/session";
 import BusinessSettingsForm from "./BusinessSettingsForm";
@@ -11,7 +12,13 @@ export default async function SettingsPage() {
 
   return (
     <main className="mx-auto max-w-xl p-8">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+      <Link
+        href="/owner/dashboard"
+        className="text-sm text-gray-600 hover:underline"
+      >
+        ← Back to dashboard
+      </Link>
+      <h1 className="mt-4 text-2xl font-semibold">Settings</h1>
       <p className="mt-1 text-sm text-gray-600">{business.name}</p>
 
       <section className="mt-8">

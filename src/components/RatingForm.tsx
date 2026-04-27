@@ -96,6 +96,17 @@ export default function RatingForm({
         token={token}
         googleReviewUrl={googleReviewUrl}
         initialDraft={stage.aiSuggestedReview}
+        onSwitchToPrivate={(currentText) => {
+          // Customer changed their mind after seeing the Google draft. Carry
+          // their current textarea content over to PrivateStage so they can
+          // edit/keep it instead of typing again.
+          setStage({
+            kind: "private",
+            rating: stage.rating,
+            alreadySubmitted: false,
+            initialText: currentText
+          });
+        }}
       />
     );
   }
@@ -267,11 +278,13 @@ function RateStage({
 function GoogleStage({
   token,
   googleReviewUrl,
-  initialDraft
+  initialDraft,
+  onSwitchToPrivate
 }: {
   token: string;
   googleReviewUrl: string | null;
   initialDraft: string | null;
+  onSwitchToPrivate: (currentText: string) => void;
 }) {
   // Textarea is seeded from whatever the rate submit returned (AI draft or
   // empty). GoogleStage no longer fetches /suggest on mount — generation
@@ -294,6 +307,21 @@ function GoogleStage({
         ta.select();
         ta.scrollIntoView({ behavior: "smooth", block: "center" });
       }
+    }
+  }
+
+  const [switching, setSwitching] = useState(false);
+  async function switchToPrivate() {
+    if (switching) return;
+    setSwitching(true);
+    try {
+      await fetch(`/api/r/${token}/route-to-private`, { method: "POST" });
+      // We hand the parent the current textarea content so PrivateStage can
+      // seed from it (don't make the customer retype). Server flip is
+      // best-effort — even if it failed, switching the UI is the right thing.
+      onSwitchToPrivate(text);
+    } finally {
+      setSwitching(false);
     }
   }
 
@@ -380,6 +408,17 @@ function GoogleStage({
           </p>
         </>
       )}
+
+      <button
+        type="button"
+        onClick={switchToPrivate}
+        disabled={switching}
+        className="text-center text-sm text-gray-600 underline disabled:opacity-50"
+      >
+        {switching
+          ? "Switching…"
+          : "Or submit this privately to the owner only"}
+      </button>
     </div>
   );
 }
