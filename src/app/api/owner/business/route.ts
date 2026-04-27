@@ -30,13 +30,15 @@ export async function PUT(req: Request) {
 
   // Null out any stale googleReviewUrl override so the derived URL from the
   // new Place ID takes effect. Also sync business.name to Google's canonical
-  // value so the dashboard stops showing whatever placeholder the seed set.
+  // value (so the dashboard stops showing whatever placeholder the seed set)
+  // and cache the primary type for the AI review prompt's grounding.
   await prisma.business.update({
     where: { id: business.id },
     data: {
       googlePlaceId: place.placeId,
       googleReviewUrl: null,
-      name: place.name
+      name: place.name,
+      googleBusinessType: place.primaryType
     }
   });
 
