@@ -16,13 +16,14 @@ export async function POST(
   if (!row) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  // Only generate for the 4-5★ Google flow — private feedback doesn't need a
-  // Google review draft.
-  if (row.routedTo !== "google" || !row.ratedAt) {
-    return NextResponse.json(
-      { error: "not a google-routed request" },
-      { status: 400 }
-    );
+  // Both routes get an AI draft — Google review for 4-5★, constructive
+  // private feedback to the owner for 1-3★. ai-review.ts branches on rating.
+  if (
+    !row.ratedAt ||
+    row.rating == null ||
+    (row.routedTo !== "google" && row.routedTo !== "private")
+  ) {
+    return NextResponse.json({ error: "not rated yet" }, { status: 400 });
   }
 
   // Cached — first generation only. Subsequent calls (refresh, second device)
@@ -38,7 +39,9 @@ export async function POST(
       row.business.googleBusinessType,
       row.business.googleEditorialSummary,
       row.business.ownerDescription,
-      row.reviewText
+      row.reviewText,
+      row.rating,
+      row.routedTo
     );
   } catch (e) {
     console.error(`AI review generation failed for ${row.id}:`, e);

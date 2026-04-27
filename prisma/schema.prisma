@@ -72,6 +72,10 @@ model ReviewRequest {
   optedOut        Boolean   @default(false)
   // Twilio SID once real SMS provider is wired in.
   smsSid          String?
+  // Set when Twilio's status callback reports the SMS as delivered to the
+  // recipient's device. Distinct from sentAt (which only means Twilio
+  // accepted the send). Email rows leave this null.
+  smsDeliveredAt  DateTime?
   // Short random slug used in /r/:token URL; unique so lookup is cheap.
   token           String    @unique
   createdAt       DateTime  @default(now())
