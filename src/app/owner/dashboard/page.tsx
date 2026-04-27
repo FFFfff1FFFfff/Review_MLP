@@ -22,7 +22,6 @@ export default async function DashboardPage() {
     ratedCount,
     googleClickedCount,
     privateFeedback,
-    positiveRatings,
     recent
   ] = await Promise.all([
     prisma.reviewRequest.count({ where: scope }),
@@ -42,18 +41,9 @@ export default async function DashboardPage() {
       take: 20
     }),
     prisma.reviewRequest.findMany({
-      where: {
-        businessId: business.id,
-        routedTo: "google",
-        ratedAt: { not: null }
-      },
-      orderBy: { ratedAt: "desc" },
-      take: 20
-    }),
-    prisma.reviewRequest.findMany({
       where: { businessId: business.id },
       orderBy: { createdAt: "desc" },
-      take: 10
+      take: 20
     })
   ]);
 
@@ -131,50 +121,6 @@ export default async function DashboardPage() {
         </ul>
       )}
 
-      <h2 className="mt-10 text-lg font-semibold">
-        Positive ratings (4-5★)
-      </h2>
-      {positiveRatings.length === 0 ? (
-        <p className="mt-2 text-sm text-gray-600">No positive ratings yet.</p>
-      ) : (
-        <ul className="mt-3 space-y-3">
-          {positiveRatings.map((r) => (
-            <li
-              key={r.id}
-              className="rounded border border-gray-200 p-3 text-sm"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-medium">{r.rating}★</span>
-                <span className="text-xs text-gray-500">
-                  {r.ratedAt?.toLocaleString() ?? ""}
-                </span>
-              </div>
-              {r.reviewText && (
-                <p className="mt-2 whitespace-pre-wrap text-gray-800">
-                  {r.reviewText}
-                </p>
-              )}
-              <div className="mt-2 flex items-center justify-between">
-                <span className="font-mono text-xs text-gray-500">
-                  {r.deliveryChannel === "sms"
-                    ? r.clientPhoneE164
-                    : r.clientEmail}
-                </span>
-                {r.googleClickedAt ? (
-                  <span className="text-xs text-green-700">
-                    ✓ Opened Google Reviews
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-500">
-                    Did not open Google
-                  </span>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
       <h2 className="mt-10 text-lg font-semibold">Recent requests</h2>
       {recent.length === 0 ? (
         <p className="mt-2 text-sm text-gray-600">No requests yet.</p>
@@ -182,10 +128,20 @@ export default async function DashboardPage() {
         <ul className="mt-3 divide-y divide-gray-200 border-y border-gray-200">
           {recent.map((r) => (
             <li key={r.id} className="py-3 text-sm">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded bg-gray-100 px-2 py-0.5 text-xs uppercase text-gray-700">
                   {r.deliveryChannel}
                 </span>
+                {r.routedTo === "private" && r.ratedAt && (
+                  <span className="rounded bg-amber-100 px-2 py-0.5 text-xs uppercase text-amber-800">
+                    private
+                  </span>
+                )}
+                {r.routedTo === "google" && r.googleClickedAt && (
+                  <span className="rounded bg-green-100 px-2 py-0.5 text-xs uppercase text-green-800">
+                    opened google
+                  </span>
+                )}
                 <span className="font-mono">
                   {r.deliveryChannel === "sms"
                     ? r.clientPhoneE164
@@ -196,9 +152,13 @@ export default async function DashboardPage() {
                 scheduled {r.scheduledSendAt.toISOString()}
                 {r.sentAt ? " · sent" : " · pending"}
                 {r.ratedAt ? ` · rated ${r.rating}★` : ""}
-                {r.routedTo ? ` · ${r.routedTo}` : ""}
                 {r.optedOut ? " · opted out" : ""}
               </div>
+              {r.reviewText && (
+                <p className="mt-2 whitespace-pre-wrap text-gray-800">
+                  {r.reviewText}
+                </p>
+              )}
               {r.smsSid && (
                 <div className="mt-1">
                   <SmsStatusButton sid={r.smsSid} />
