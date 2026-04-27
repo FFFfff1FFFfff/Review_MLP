@@ -75,7 +75,17 @@ export async function GET(req: Request) {
         results.push({ id: row.id, status: "deferred-missing-phone" });
         continue;
       }
-      target = { channel: "sms", toPhoneE164: row.clientPhoneE164 };
+      // Skip the callback URL on localhost — Twilio's webhook validator
+      // rejects non-public hosts and the send fails. Production / preview
+      // both have a real APP_URL set.
+      const isPublicAppUrl = !/^https?:\/\/localhost(:|\/|$)/.test(env.APP_URL);
+      target = {
+        channel: "sms",
+        toPhoneE164: row.clientPhoneE164,
+        statusCallbackUrl: isPublicAppUrl
+          ? `${env.APP_URL}/api/sms/status-callback`
+          : undefined
+      };
       body = renderSmsBody(row.business, row.token, env.APP_URL);
     } else if (row.deliveryChannel === "email") {
       if (!row.clientEmail) {

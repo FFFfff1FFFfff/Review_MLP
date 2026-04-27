@@ -12,6 +12,11 @@ interface InitialRouting {
   feedbackSubmitted: boolean;
 }
 
+// Single low-bar threshold reused everywhere we choose between the Google-
+// review prompt and the private-feedback prompt. Mirrors the rating cutoff
+// in /api/r/[token]/rate.
+const POSITIVE_MIN = 4;
+
 interface Props {
   token: string;
   businessName: string;
@@ -40,7 +45,8 @@ export default function RatingForm({
 }: Props) {
   // If the row is already rated, resume where the client left off. On revisit
   // we use whatever AI draft was cached previously (or null if the first
-  // submission didn't opt into AI).
+  // submission didn't opt into AI). The cached draft now also seeds private-
+  // feedback rows, since 1-3★ rows can be drafted with AI too.
   const initialStage: Stage = useMemo(() => {
     if (initialRouting?.routedTo === "google") {
       return {
@@ -50,15 +56,15 @@ export default function RatingForm({
       };
     }
     if (initialRouting?.routedTo === "private") {
+      // Prefer the cached AI draft on revisit (so refreshes don't drop it),
+      // falling back to whatever raw text the customer typed.
+      const seed =
+        initialRouting.aiSuggestedReview ?? initialRouting.reviewText ?? "";
       return {
         kind: "private",
         rating: initialRouting.rating ?? 1,
         alreadySubmitted: initialRouting.feedbackSubmitted,
-        // On revisit before submitting feedback, reviewText holds the rate-
-        // step textarea content. After feedback is submitted it holds the
-        // feedback body — but in that case we render the Thanks view and
-        // initialText is ignored anyway.
-        initialText: initialRouting.reviewText ?? ""
+        initialText: seed
       };
     }
     return { kind: "rate" };
@@ -70,7 +76,7 @@ export default function RatingForm({
     return (
       <RateStage
         token={token}
-        onRouted={(routedTo, rating, rateText, aiDraft) => {
+        onRouted={(routedTo, rating, rateText, aiDraft, feedbackSubmitted) => {
           if (routedTo === "google") {
             setStage({
               kind: "google",
@@ -78,11 +84,15 @@ export default function RatingForm({
               aiSuggestedReview: aiDraft
             });
           } else {
+            // Use the AI draft as the seed if the customer asked for one;
+            // otherwise fall back to whatever they typed. When the rate-step
+            // text was already auto-submitted as feedback, jump straight to
+            // the Thanks view instead of asking for feedback again.
             setStage({
               kind: "private",
               rating,
-              alreadySubmitted: false,
-              initialText: rateText
+              alreadySubmitted: feedbackSubmitted,
+              initialText: aiDraft ?? rateText
             });
           }
         }}
@@ -142,7 +152,8 @@ function RateStage({
     routedTo: Routed,
     rating: number,
     rateText: string,
-    aiDraft: string | null
+    aiDraft: string | null,
+    feedbackSubmitted: boolean
   ) => void;
 }) {
   const [rating, setRating] = useState(0);
@@ -172,11 +183,14 @@ function RateStage({
         return;
       }
       const routedTo: Routed = body.routedTo === "google" ? "google" : "private";
+      const trimmed = text.trim();
 
-      // Only call /suggest when the customer asked for AI AND we're on the
-      // Google path — low ratings don't need a Google draft.
+      // Call /suggest whenever the customer asked for AI, regardless of
+      // routing — 1-3★ rows now get an AI-drafted private-feedback note,
+      // and 4-5★ rows get the existing Google review draft. The endpoint
+      // branches its prompt on rating.
       let aiDraft: string | null = null;
-      if (mode === "ai" && routedTo === "google") {
+      if (mode === "ai") {
         try {
           const sugRes = await fetch(`/api/r/${token}/suggest`, {
             method: "POST"
@@ -186,20 +200,42 @@ function RateStage({
             aiDraft = sugBody.suggested;
           }
         } catch {
-          // Generation failure isn't fatal — GoogleStage handles a null draft
-          // gracefully (empty textarea + placeholder). No loading spinner.
+          // Generation failure isn't fatal — both stages handle a null draft
+          // gracefully (empty textarea + placeholder).
         }
       }
-      onRouted(routedTo, rating, text.trim(), aiDraft);
+
+      // If the customer typed feedback in the rate step AND ended up on the
+      // private path, that text IS their private feedback — submit it now so
+      // they don't get a second "What could we have done better?" form. AI
+      // mode is exempt: the customer needs a chance to review the AI draft
+      // before sending. Best-effort: if /feedback fails the user falls back
+      // to the existing form path.
+      let feedbackSubmitted = false;
+      if (mode === "plain" && routedTo === "private" && trimmed.length > 0) {
+        try {
+          const fbRes = await fetch(`/api/r/${token}/feedback`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text: trimmed })
+          });
+          if (fbRes.ok) feedbackSubmitted = true;
+        } catch {
+          // Network blip — leave feedbackSubmitted=false and the user will
+          // see PrivateStage with their text pre-filled.
+        }
+      }
+
+      onRouted(routedTo, rating, trimmed, aiDraft, feedbackSubmitted);
     } finally {
       setBusy(null);
     }
   }
 
-  // Only offer AI draft for ratings that would route to Google. Avoids the
-  // "I asked for AI but ended up in private feedback" surprise. keepPrivate
-  // forces the private path, so suppress AI in that case too.
-  const canUseAi = rating >= 4 && !keepPrivate;
+  // AI draft is offered at every rating: 4-5★ gets a Google review draft,
+  // 1-3★ gets a constructive private-feedback draft. Only hide before the
+  // user has actually picked a rating (otherwise the prompt has no signal).
+  const canUseAi = rating > 0;
   const isBusy = busy !== null;
 
   return (
@@ -479,7 +515,7 @@ function PrivateStage({
 
   // 4-5★ customers reach this stage via "Submit privately" / the Google-stage
   // late opt-out — they're not unhappy. Only 1-3★ rated this as a complaint.
-  const positivePath = rating >= 4;
+  const positivePath = rating >= POSITIVE_MIN;
   const intro = positivePath
     ? "Thanks for the rating. Share anything you'd like the owner to know — this stays private."
     : "Sorry it wasn't a great visit. Tell us what happened — this goes straight to the owner and stays private.";

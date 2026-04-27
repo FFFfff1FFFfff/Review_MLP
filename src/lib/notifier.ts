@@ -1,7 +1,13 @@
 import { Resend } from "resend";
 import { env } from "./env";
 
-export type SmsTarget = { channel: "sms"; toPhoneE164: string };
+export type SmsTarget = {
+  channel: "sms";
+  toPhoneE164: string;
+  // Optional Twilio statusCallback URL. When set, Twilio POSTs delivery
+  // events here so we can mark smsDeliveredAt without polling.
+  statusCallbackUrl?: string;
+};
 export type EmailTarget = {
   channel: "email";
   toEmail: string;
@@ -39,7 +45,7 @@ class LiveNotifier implements Notifier {
 
   async send(target: NotifierTarget, body: string) {
     if (target.channel === "sms") {
-      return sendTwilioSms(target.toPhoneE164, body);
+      return sendTwilioSms(target.toPhoneE164, body, target.statusCallbackUrl);
     }
     if (!this.resend) this.resend = new Resend(env.RESEND_API_KEY);
     const { data, error } = await this.resend.emails.send({
@@ -55,23 +61,28 @@ class LiveNotifier implements Notifier {
 
 async function sendTwilioSms(
   toE164: string,
-  body: string
+  body: string,
+  statusCallbackUrl?: string
 ): Promise<{ providerId: string | null }> {
   const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`;
   const auth = Buffer.from(
     `${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`
   ).toString("base64");
+  const params: Record<string, string> = {
+    From: env.TWILIO_PHONE_NUMBER,
+    To: toE164,
+    Body: body
+  };
+  // Twilio rejects localhost / non-public callbacks. Cron passes one only
+  // when APP_URL is publicly reachable (i.e. not the dev default).
+  if (statusCallbackUrl) params.StatusCallback = statusCallbackUrl;
   const res = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Basic ${auth}`,
       "Content-Type": "application/x-www-form-urlencoded"
     },
-    body: new URLSearchParams({
-      From: env.TWILIO_PHONE_NUMBER,
-      To: toE164,
-      Body: body
-    })
+    body: new URLSearchParams(params)
   });
   if (!res.ok) {
     // Twilio returns JSON errors like {"code":21211,"message":"The 'To'

@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { getSessionBusiness } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import DeleteRequestButton from "@/components/DeleteRequestButton";
-import SmsStatusButton from "@/components/SmsStatusButton";
 
 export const dynamic = "force-dynamic";
 
@@ -134,6 +133,11 @@ export default async function DashboardPage() {
                   <span className="rounded bg-gray-100 px-2 py-0.5 text-xs uppercase text-gray-700">
                     {r.deliveryChannel}
                   </span>
+                  {r.deliveryChannel === "sms" && r.smsDeliveredAt && (
+                    <span className="rounded bg-blue-100 px-2 py-0.5 text-xs uppercase text-blue-800">
+                      delivered
+                    </span>
+                  )}
                   {r.routedTo === "private" && r.ratedAt && (
                     <span className="rounded bg-amber-100 px-2 py-0.5 text-xs uppercase text-amber-800">
                       private
@@ -177,11 +181,6 @@ export default async function DashboardPage() {
                   </span>{" "}
                   {r.aiSuggestedReview}
                 </p>
-              )}
-              {r.smsSid && (
-                <div className="mt-1">
-                  <SmsStatusButton sid={r.smsSid} />
-                </div>
               )}
             </li>
           ))}
