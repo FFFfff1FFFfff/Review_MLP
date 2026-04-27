@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { sendPrivateFeedbackEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 
 const Body = z.object({
@@ -18,7 +17,13 @@ export async function POST(
 
   const row = await prisma.reviewRequest.findUnique({
     where: { token: params.token },
-    include: { business: true }
+    select: {
+      id: true,
+      ratedAt: true,
+      rating: true,
+      routedTo: true,
+      feedbackSubmittedAt: true
+    }
   });
   if (!row) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -35,38 +40,15 @@ export async function POST(
     return NextResponse.json({ ok: true, alreadySubmitted: true });
   }
 
-  const { text } = parsed.data;
-
-  // Persist first, atomically. The earlier feedbackSubmittedAt check is
-  // read-then-act and non-atomic — two concurrent submits can both clear it
-  // and race here. updateMany's filter is the authoritative gate: whichever
-  // request sets feedbackSubmittedAt first wins (count=1); the loser gets
-  // count=0 and must NOT send an owner email (its text was never persisted,
-  // so the email would diverge from the stored feedback).
+  // Persist atomically. updateMany's filter is the authoritative gate against
+  // double-submits; loser gets count=0. Owner sees the feedback on the
+  // dashboard's Private feedback inbox — no email is sent.
   const updated = await prisma.reviewRequest.updateMany({
     where: { id: row.id, feedbackSubmittedAt: null },
-    data: { reviewText: text, feedbackSubmittedAt: new Date() }
+    data: { reviewText: parsed.data.text, feedbackSubmittedAt: new Date() }
   });
   if (updated.count === 0) {
     return NextResponse.json({ ok: true, alreadySubmitted: true });
   }
-
-  try {
-    await sendPrivateFeedbackEmail({
-      toOwner: row.business.ownerEmail,
-      businessName: row.business.name,
-      rating: row.rating,
-      text,
-      clientContact:
-        row.deliveryChannel === "sms"
-          ? (row.clientPhoneE164 ?? "unknown")
-          : (row.clientEmail ?? "unknown")
-    });
-  } catch (e) {
-    // Don't fail the client submission if the notify email fails — the
-    // feedback is already persisted and visible in the owner dashboard.
-    console.error(`private feedback email failed for ${row.id}:`, e);
-  }
-
   return NextResponse.json({ ok: true });
 }
