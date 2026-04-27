@@ -114,6 +114,7 @@ export default function RatingForm({
   return (
     <PrivateStage
       token={token}
+      rating={stage.rating}
       alreadySubmitted={stage.alreadySubmitted}
       initialText={stage.initialText}
       onSubmitted={() =>
@@ -427,11 +428,13 @@ function GoogleStage({
 
 function PrivateStage({
   token,
+  rating,
   alreadySubmitted,
   initialText,
   onSubmitted
 }: {
   token: string;
+  rating: number;
   alreadySubmitted: boolean;
   initialText: string;
   onSubmitted: () => void;
@@ -474,18 +477,25 @@ function PrivateStage({
     onSubmitted();
   }
 
+  // 4-5★ customers reach this stage via "Submit privately" / the Google-stage
+  // late opt-out — they're not unhappy. Only 1-3★ rated this as a complaint.
+  const positivePath = rating >= 4;
+  const intro = positivePath
+    ? "Thanks for the rating. Share anything you'd like the owner to know — this stays private."
+    : "Sorry it wasn't a great visit. Tell us what happened — this goes straight to the owner and stays private.";
+  const placeholder = positivePath
+    ? "What did you enjoy? Anything to mention?"
+    : "What could we have done better?";
+
   return (
     <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
-      <p className="text-base">
-        Sorry it wasn&apos;t a great visit. Tell us what happened — this goes
-        straight to the owner and stays private.
-      </p>
+      <p className="text-base">{intro}</p>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={6}
         maxLength={2000}
-        placeholder="What could we have done better?"
+        placeholder={placeholder}
         className="w-full rounded border border-gray-300 px-3 py-2 text-base"
       />
       <button
