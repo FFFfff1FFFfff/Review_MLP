@@ -22,6 +22,7 @@ export default async function DashboardPage() {
     ratedCount,
     googleClickedCount,
     privateFeedback,
+    positiveRatings,
     recent
   ] = await Promise.all([
     prisma.reviewRequest.count({ where: scope }),
@@ -38,6 +39,15 @@ export default async function DashboardPage() {
         feedbackSubmittedAt: { not: null }
       },
       orderBy: { feedbackSubmittedAt: "desc" },
+      take: 20
+    }),
+    prisma.reviewRequest.findMany({
+      where: {
+        businessId: business.id,
+        routedTo: "google",
+        ratedAt: { not: null }
+      },
+      orderBy: { ratedAt: "desc" },
       take: 20
     }),
     prisma.reviewRequest.findMany({
@@ -115,6 +125,50 @@ export default async function DashboardPage() {
                 {r.deliveryChannel === "sms"
                   ? r.clientPhoneE164
                   : r.clientEmail}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h2 className="mt-10 text-lg font-semibold">
+        Positive ratings (4-5★)
+      </h2>
+      {positiveRatings.length === 0 ? (
+        <p className="mt-2 text-sm text-gray-600">No positive ratings yet.</p>
+      ) : (
+        <ul className="mt-3 space-y-3">
+          {positiveRatings.map((r) => (
+            <li
+              key={r.id}
+              className="rounded border border-gray-200 p-3 text-sm"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{r.rating}★</span>
+                <span className="text-xs text-gray-500">
+                  {r.ratedAt?.toLocaleString() ?? ""}
+                </span>
+              </div>
+              {r.reviewText && (
+                <p className="mt-2 whitespace-pre-wrap text-gray-800">
+                  {r.reviewText}
+                </p>
+              )}
+              <div className="mt-2 flex items-center justify-between">
+                <span className="font-mono text-xs text-gray-500">
+                  {r.deliveryChannel === "sms"
+                    ? r.clientPhoneE164
+                    : r.clientEmail}
+                </span>
+                {r.googleClickedAt ? (
+                  <span className="text-xs text-green-700">
+                    ✓ Opened Google Reviews
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-500">
+                    Did not open Google
+                  </span>
+                )}
               </div>
             </li>
           ))}
