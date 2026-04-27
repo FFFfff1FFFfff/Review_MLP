@@ -235,7 +235,7 @@ function RateStage({
           onChange={(e) => setKeepPrivate(e.target.checked)}
           className="mt-1"
         />
-        <span>Send only to the owner — don&apos;t route to Google.</span>
+        <span>Submit privately — only the owner sees this, not Google.</span>
       </label>
 
       {canUseAi && (

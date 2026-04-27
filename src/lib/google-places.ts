@@ -7,6 +7,10 @@ export interface PlaceResult {
   // e.g. "Hair salon", "Coffee shop". Null if Places didn't classify the
   // business or the field was omitted from the response.
   primaryType: string | null;
+  // Google's curated one-liner about the business, when Places has it
+  // (smaller / niche businesses often don't). Used as a grounding hint for
+  // AI review drafts.
+  editorialSummary: string | null;
 }
 
 export class PlacesApiError extends Error {
@@ -33,9 +37,9 @@ function looksLikeUrl(s: string): boolean {
 
 const BASE = "https://places.googleapis.com/v1";
 const FIELD_MASK =
-  "places.id,places.displayName,places.formattedAddress,places.primaryTypeDisplayName";
+  "places.id,places.displayName,places.formattedAddress,places.primaryTypeDisplayName,places.editorialSummary";
 const DETAILS_MASK =
-  "id,displayName,formattedAddress,primaryTypeDisplayName";
+  "id,displayName,formattedAddress,primaryTypeDisplayName,editorialSummary";
 
 // Follow a Google Maps share link (e.g. maps.app.goo.gl/xxx) to its full URL
 // and pull the business name from the `/maps/place/<name>/@...` segment.
@@ -114,7 +118,8 @@ async function fetchPlaceDetails(placeId: string): Promise<PlaceResult | null> {
     placeId: data.id,
     name: data.displayName.text,
     formattedAddress: data.formattedAddress ?? "",
-    primaryType: data.primaryTypeDisplayName?.text ?? null
+    primaryType: data.primaryTypeDisplayName?.text ?? null,
+    editorialSummary: data.editorialSummary?.text ?? null
   };
 }
 
@@ -140,13 +145,15 @@ async function fetchTextSearch(query: string): Promise<PlaceResult[]> {
         displayName?: { text?: string };
         formattedAddress?: string;
         primaryTypeDisplayName?: { text?: string };
+        editorialSummary?: { text?: string };
       };
       if (!pp.id || !pp.displayName?.text) return null;
       return {
         placeId: pp.id,
         name: pp.displayName.text,
         formattedAddress: pp.formattedAddress ?? "",
-        primaryType: pp.primaryTypeDisplayName?.text ?? null
+        primaryType: pp.primaryTypeDisplayName?.text ?? null,
+        editorialSummary: pp.editorialSummary?.text ?? null
       };
     })
     .filter((p): p is PlaceResult => p !== null);
