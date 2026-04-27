@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionBusiness } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import DeleteRequestButton from "@/components/DeleteRequestButton";
 import SmsStatusButton from "@/components/SmsStatusButton";
 
 export const dynamic = "force-dynamic";
@@ -128,25 +129,35 @@ export default async function DashboardPage() {
         <ul className="mt-3 divide-y divide-gray-200 border-y border-gray-200">
           {recent.map((r) => (
             <li key={r.id} className="py-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded bg-gray-100 px-2 py-0.5 text-xs uppercase text-gray-700">
-                  {r.deliveryChannel}
-                </span>
-                {r.routedTo === "private" && r.ratedAt && (
-                  <span className="rounded bg-amber-100 px-2 py-0.5 text-xs uppercase text-amber-800">
-                    private
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-gray-100 px-2 py-0.5 text-xs uppercase text-gray-700">
+                    {r.deliveryChannel}
                   </span>
-                )}
-                {r.routedTo === "google" && r.googleClickedAt && (
-                  <span className="rounded bg-green-100 px-2 py-0.5 text-xs uppercase text-green-800">
-                    opened google
+                  {r.routedTo === "private" && r.ratedAt && (
+                    <span className="rounded bg-amber-100 px-2 py-0.5 text-xs uppercase text-amber-800">
+                      private
+                    </span>
+                  )}
+                  {r.routedTo === "google" && r.googleClickedAt && (
+                    <span className="rounded bg-green-100 px-2 py-0.5 text-xs uppercase text-green-800">
+                      opened google
+                    </span>
+                  )}
+                  <span className="font-mono">
+                    {r.deliveryChannel === "sms"
+                      ? r.clientPhoneE164
+                      : r.clientEmail}
                   </span>
-                )}
-                <span className="font-mono">
-                  {r.deliveryChannel === "sms"
-                    ? r.clientPhoneE164
-                    : r.clientEmail}
-                </span>
+                </div>
+                <DeleteRequestButton
+                  id={r.id}
+                  label={
+                    r.deliveryChannel === "sms"
+                      ? (r.clientPhoneE164 ?? "(unknown)")
+                      : (r.clientEmail ?? "(unknown)")
+                  }
+                />
               </div>
               <div className="mt-1 text-gray-600">
                 scheduled {r.scheduledSendAt.toISOString()}
@@ -157,6 +168,14 @@ export default async function DashboardPage() {
               {r.reviewText && (
                 <p className="mt-2 whitespace-pre-wrap text-gray-800">
                   {r.reviewText}
+                </p>
+              )}
+              {r.routedTo === "google" && r.aiSuggestedReview && (
+                <p className="mt-2 whitespace-pre-wrap text-sm text-gray-600">
+                  <span className="font-medium text-gray-700">
+                    AI draft shown to customer:
+                  </span>{" "}
+                  {r.aiSuggestedReview}
                 </p>
               )}
               {r.smsSid && (
