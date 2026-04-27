@@ -76,7 +76,7 @@ export default function RatingForm({
     return (
       <RateStage
         token={token}
-        onRouted={(routedTo, rating, rateText, aiDraft) => {
+        onRouted={(routedTo, rating, rateText, aiDraft, feedbackSubmitted) => {
           if (routedTo === "google") {
             setStage({
               kind: "google",
@@ -85,11 +85,13 @@ export default function RatingForm({
             });
           } else {
             // Use the AI draft as the seed if the customer asked for one;
-            // otherwise fall back to whatever they typed.
+            // otherwise fall back to whatever they typed. When the rate-step
+            // text was already auto-submitted as feedback, jump straight to
+            // the Thanks view instead of asking for feedback again.
             setStage({
               kind: "private",
               rating,
-              alreadySubmitted: false,
+              alreadySubmitted: feedbackSubmitted,
               initialText: aiDraft ?? rateText
             });
           }
@@ -150,7 +152,8 @@ function RateStage({
     routedTo: Routed,
     rating: number,
     rateText: string,
-    aiDraft: string | null
+    aiDraft: string | null,
+    feedbackSubmitted: boolean
   ) => void;
 }) {
   const [rating, setRating] = useState(0);
@@ -180,6 +183,7 @@ function RateStage({
         return;
       }
       const routedTo: Routed = body.routedTo === "google" ? "google" : "private";
+      const trimmed = text.trim();
 
       // Call /suggest whenever the customer asked for AI, regardless of
       // routing — 1-3★ rows now get an AI-drafted private-feedback note,
@@ -200,7 +204,29 @@ function RateStage({
           // gracefully (empty textarea + placeholder).
         }
       }
-      onRouted(routedTo, rating, text.trim(), aiDraft);
+
+      // If the customer typed feedback in the rate step AND ended up on the
+      // private path, that text IS their private feedback — submit it now so
+      // they don't get a second "What could we have done better?" form. AI
+      // mode is exempt: the customer needs a chance to review the AI draft
+      // before sending. Best-effort: if /feedback fails the user falls back
+      // to the existing form path.
+      let feedbackSubmitted = false;
+      if (mode === "plain" && routedTo === "private" && trimmed.length > 0) {
+        try {
+          const fbRes = await fetch(`/api/r/${token}/feedback`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text: trimmed })
+          });
+          if (fbRes.ok) feedbackSubmitted = true;
+        } catch {
+          // Network blip — leave feedbackSubmitted=false and the user will
+          // see PrivateStage with their text pre-filled.
+        }
+      }
+
+      onRouted(routedTo, rating, trimmed, aiDraft, feedbackSubmitted);
     } finally {
       setBusy(null);
     }
