@@ -159,6 +159,14 @@ export default async function DashboardPage() {
                   {r.reviewText}
                 </p>
               )}
+              {r.routedTo === "google" && r.aiSuggestedReview && (
+                <p className="mt-2 whitespace-pre-wrap text-sm text-gray-600">
+                  <span className="font-medium text-gray-700">
+                    AI draft shown to customer:
+                  </span>{" "}
+                  {r.aiSuggestedReview}
+                </p>
+              )}
               {r.smsSid && (
                 <div className="mt-1">
                   <SmsStatusButton sid={r.smsSid} />
