@@ -51,6 +51,7 @@ export default function NewRequestPage() {
   function resetWarnings() {
     setWarning(null);
     setOverride(false);
+    setError(null);
   }
 
   return (
