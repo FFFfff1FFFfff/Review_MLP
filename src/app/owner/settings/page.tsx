@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionBusiness } from "@/lib/session";
 import BusinessSettingsForm from "./BusinessSettingsForm";
 import OwnerDescriptionForm from "./OwnerDescriptionForm";
+import OwnerNameForm from "./OwnerNameForm";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,14 @@ export default async function SettingsPage() {
       <p className="mt-1 text-sm text-gray-600">{business.name}</p>
 
       <section className="mt-8">
+        <h2 className="text-lg font-semibold">Your name</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Shown to customers as the sender of the review request.
+        </p>
+        <OwnerNameForm initialValue={business.ownerFirstName} />
+      </section>
+
+      <section className="mt-10">
         <h2 className="text-lg font-semibold">Google Place ID</h2>
         <p className="mt-1 text-sm text-gray-600">
           Set where your 4-5★ customers will post their Google review.
