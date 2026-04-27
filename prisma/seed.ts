@@ -2,33 +2,28 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// Single-pilot MLP: one hardcoded business. This seed is idempotent across
-// redeploys — it updates the lone row's ownerEmail to match PILOT_OWNER_EMAIL
-// without disturbing fields (e.g. googlePlaceId) that may have been edited
-// directly in the DB.
+// Bootstrap a single Business on a fresh database so the first owner can log
+// in without /owner/signup. This runs on every `prisma db push` (including
+// every Vercel deploy) — so it MUST be a pure no-op when any Business row
+// already exists. Updating an existing row would stomp on multi-tenant data
+// (e.g. rewriting another owner's ownerEmail to PILOT_OWNER_EMAIL and locking
+// them out on their next login).
 async function main() {
-  const ownerEmail = process.env.PILOT_OWNER_EMAIL ?? "owner@example.com";
-
-  const existing = await prisma.business.findFirst();
+  const existing = await prisma.business.findFirst({ select: { id: true } });
   if (existing) {
-    await prisma.business.update({
-      where: { id: existing.id },
-      data: { ownerEmail }
-    });
-    console.log(`updated business ${existing.id} ownerEmail -> ${ownerEmail}`);
-  } else {
-    // Placeholder values — owner overwrites `name` via /owner/settings the
-    // first time they save a Place ID (PUT /api/owner/business pulls the
-    // canonical name from the Places API result).
-    const created = await prisma.business.create({
-      data: {
-        name: "Your business",
-        ownerEmail,
-        ownerFirstName: "Owner"
-      }
-    });
-    console.log(`seeded business ${created.id} for ${ownerEmail}`);
+    console.log(`seed: ${existing.id} already exists, skipping`);
+    return;
   }
+
+  const ownerEmail = process.env.PILOT_OWNER_EMAIL ?? "owner@example.com";
+  const created = await prisma.business.create({
+    data: {
+      name: "Your business",
+      ownerEmail,
+      ownerFirstName: "Owner"
+    }
+  });
+  console.log(`seed: created ${created.id} for ${ownerEmail}`);
 }
 
 main()

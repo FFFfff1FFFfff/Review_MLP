@@ -17,6 +17,17 @@ model Business {
   // Either googleReviewUrl (override) or googlePlaceId must be set before sending.
   googlePlaceId   String?
   googleReviewUrl String?
+  // Localized "Hair salon" / "Coffee shop" string from the Places API result,
+  // saved alongside googlePlaceId. Fed into the AI review prompt so drafts use
+  // type-appropriate vocabulary instead of generic "great service" filler.
+  googleBusinessType String?
+  // Google's editorial one-liner about the business (when Places has it),
+  // also fed into the AI review prompt for grounding.
+  googleEditorialSummary String?
+  // Owner-written 1-2 sentence description, fed into the AI prompt as the most
+  // authoritative grounding (the owner knows their own business better than
+  // Google's auto-classification). Plain text, max ~500 chars enforced at API.
+  ownerDescription String?
   // Optional per-business SMS body override.
   smsTemplate     String?
   // Last successful magic-link dispatch — gates the per-email cooldown so

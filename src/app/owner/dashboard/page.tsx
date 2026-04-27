@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionBusiness } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import SmsStatusButton from "@/components/SmsStatusButton";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +145,11 @@ export default async function DashboardPage() {
                 {r.routedTo ? ` · ${r.routedTo}` : ""}
                 {r.optedOut ? " · opted out" : ""}
               </div>
+              {r.smsSid && (
+                <div className="mt-1">
+                  <SmsStatusButton sid={r.smsSid} />
+                </div>
+              )}
             </li>
           ))}
         </ul>

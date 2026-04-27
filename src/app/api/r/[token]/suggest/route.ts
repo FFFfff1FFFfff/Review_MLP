@@ -35,6 +35,9 @@ export async function POST(
   try {
     suggested = await generateSuggestedReview(
       row.business.name,
+      row.business.googleBusinessType,
+      row.business.googleEditorialSummary,
+      row.business.ownerDescription,
       row.reviewText
     );
   } catch (e) {

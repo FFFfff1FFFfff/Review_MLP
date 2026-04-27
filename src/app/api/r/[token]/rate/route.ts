@@ -6,7 +6,10 @@ const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const Body = z.object({
   rating: z.number().int().min(1).max(5),
-  text: z.string().max(2000).optional()
+  text: z.string().max(2000).optional(),
+  // Customer opt-out of the Google flow. When true, even a 4-5★ rating is
+  // routed to private feedback so the comment only reaches the owner.
+  keepPrivate: z.boolean().optional()
 });
 
 export async function POST(
@@ -30,8 +33,8 @@ export async function POST(
     return NextResponse.json({ error: "expired" }, { status: 410 });
   }
 
-  const { rating, text } = parsed.data;
-  const routedTo = rating >= 4 ? "google" : "private";
+  const { rating, text, keepPrivate } = parsed.data;
+  const routedTo = rating >= 4 && !keepPrivate ? "google" : "private";
 
   // Idempotent write: only applies when ratedAt is still null. Double-submits
   // (e.g. double-click, accidental replay) return the existing route.
